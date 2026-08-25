@@ -80,13 +80,33 @@ export function isSolid(map: LevelMap, x: number, y: number): boolean {
   return door !== undefined && !door.open;
 }
 
-function isSolidForRadius(map: LevelMap, cx: number, cy: number, radius: number): boolean {
+// A circle merely grazing a wall perpendicular to its travel (its edge
+// exactly touching, not overlapping) must not block sliding along that wall
+// — otherwise a player who drifts close enough to graze a corridor wall
+// freezes solid despite holding forward, since the axis they *are* moving on
+// keeps failing the perpendicular sample from the wall they're merely
+// touching. Easing the perpendicular sample in by CORNER_EASE lets a graze
+// (up to that much overlap) pass, while the primary-direction sample below
+// still uses the full radius, so real head-on collision is unaffected.
+const CORNER_EASE = 0.05;
+
+function isSolidAlongX(map: LevelMap, cx: number, cy: number, radius: number): boolean {
   return (
     isSolid(map, cx, cy) ||
     isSolid(map, cx + radius, cy) ||
     isSolid(map, cx - radius, cy) ||
+    isSolid(map, cx, cy + radius - CORNER_EASE) ||
+    isSolid(map, cx, cy - radius + CORNER_EASE)
+  );
+}
+
+function isSolidAlongY(map: LevelMap, cx: number, cy: number, radius: number): boolean {
+  return (
+    isSolid(map, cx, cy) ||
     isSolid(map, cx, cy + radius) ||
-    isSolid(map, cx, cy - radius)
+    isSolid(map, cx, cy - radius) ||
+    isSolid(map, cx + radius - CORNER_EASE, cy) ||
+    isSolid(map, cx - radius + CORNER_EASE, cy)
   );
 }
 
@@ -95,9 +115,9 @@ function isSolidForRadius(map: LevelMap, cx: number, cy: number, radius: number)
 export function moveWithCollision(map: LevelMap, pos: { x: number; y: number }, dx: number, dy: number, radius: number): { x: number; y: number } {
   let { x, y } = pos;
   const nx = x + dx;
-  if (!isSolidForRadius(map, nx, y, radius)) x = nx;
+  if (!isSolidAlongX(map, nx, y, radius)) x = nx;
   const ny = y + dy;
-  if (!isSolidForRadius(map, x, ny, radius)) y = ny;
+  if (!isSolidAlongY(map, x, ny, radius)) y = ny;
   return { x, y };
 }
 
