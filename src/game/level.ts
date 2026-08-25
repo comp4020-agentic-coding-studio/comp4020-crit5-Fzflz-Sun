@@ -36,11 +36,12 @@ export function buildLevel(): LevelMap {
   carve(cells, 7, 11, 7, 1); // corridor D -> C, open
 
   // A couple of interior wall-variant B accents so the raycaster's two wall
-  // textures both show up before real art exists. Kept off the main sight
-  // lines (row y=3 into room B, and the exit cell itself) so they read as
-  // scenery, not accidental cover or a blocked win condition.
-  cells[index(16, 5)] = 2;
-  cells[index(15, 10)] = 2;
+  // textures both show up before real art exists. Tucked into far corners,
+  // clear of every doorway, sightline and enemy spawn: a cell merely diagonal
+  // to a corridor mouth still snags the player's circular collision radius
+  // when hugging that wall, even though the doorway itself is unobstructed.
+  cells[index(20, 1)] = 2;
+  cells[index(20, 13)] = 2;
 
   const doors: Door[] = [
     { x: 10, y: 3, open: false },
