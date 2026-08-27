@@ -22,6 +22,9 @@ export type AssetSlot =
   | "enemy.brute.death"
   | "weapon.idle"
   | "weapon.fire"
+  | "weapon.handOpen"
+  | "weapon.handFist"
+  | "weapon.hitSplash"
   | "projectile"
   | "icon.ammo"
   | "icon.health"
@@ -55,6 +58,13 @@ export const ASSET_MANIFEST: Record<AssetSlot, AssetManifestEntry> = {
   "enemy.brute.death": { suggestedSize: [64, 80], placeholderColor: COLOR_FLOOR, path: "sprites/brute-death.png" },
   "weapon.idle": { suggestedSize: [128, 128], placeholderColor: "#cfd8e3", path: "sprites/weapon-idle.png" },
   "weapon.fire": { suggestedSize: [128, 128], placeholderColor: COLOR_CREAM, path: "sprites/weapon-fire.png" },
+  // Decorative overlays only — the housing above stays procedural (the
+  // silver-gray cream disc launcher silhouette), these just dress it up when
+  // real art is available. No procedural fallback: drawWeapon skips them
+  // outright if the PNG hasn't loaded, rather than drawing a placeholder box.
+  "weapon.handOpen": { suggestedSize: [26, 36], placeholderColor: COLOR_INK, path: "sprites/weapon-hand-open.png" },
+  "weapon.handFist": { suggestedSize: [29, 36], placeholderColor: COLOR_INK, path: "sprites/weapon-hand-fist.png" },
+  "weapon.hitSplash": { suggestedSize: [16, 20], placeholderColor: COLOR_CREAM, path: "sprites/weapon-hit-splash.png" },
   projectile: { suggestedSize: [16, 16], placeholderColor: COLOR_LAVENDER, path: "sprites/projectile.png" },
   "icon.ammo": { suggestedSize: [32, 32], placeholderColor: COLOR_CREAM, path: "sprites/icon-ammo.png" },
   "icon.health": { suggestedSize: [32, 32], placeholderColor: COLOR_PINK, path: "sprites/icon-health.png" },
@@ -413,12 +423,92 @@ function generateFrames(slot: AssetSlot): HTMLCanvasElement[] | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Real-image preloading. A small, curated subset of slots (three enemy kinds'
+// idle/hit frames, plus the weapon's hand/hit-splash overlays) can load an
+// actual PNG from /public/sprites instead of the procedural drawing above.
+// Everything else — walls, doors, icons, the weapon housing itself — stays
+// procedural; this is an opt-in list, not a blanket replacement. Loading is
+// async and best-effort: a slot with no successfully-loaded image just keeps
+// using its procedural generator, so a slow network or a missing file never
+// blocks or breaks the game.
+// ---------------------------------------------------------------------------
+
+// Idle sets have two real frames (a hand-authored "bob"); hit sets have one.
+// Any slot not listed here falls back to its single ASSET_MANIFEST path.
+const REAL_SPRITE_FRAMES: Partial<Record<AssetSlot, string[]>> = {
+  "enemy.grunt.idle": ["sprites/enemy-grunt-idle-0.png", "sprites/enemy-grunt-idle-1.png"],
+  "enemy.grunt.hit": ["sprites/enemy-grunt-hit.png"],
+  "enemy.scout.idle": ["sprites/enemy-scout-idle-0.png", "sprites/enemy-scout-idle-1.png"],
+  "enemy.scout.hit": ["sprites/enemy-scout-hit.png"],
+  "enemy.brute.idle": ["sprites/enemy-brute-idle-0.png", "sprites/enemy-brute-idle-1.png"],
+  "enemy.brute.hit": ["sprites/enemy-brute-hit.png"],
+};
+
+// Only these slots are ever fetched as real PNGs — everything else (walls,
+// icons, the weapon housing) has no shipped file and stays procedural.
+const REAL_ASSET_SLOTS: AssetSlot[] = [
+  "enemy.grunt.idle",
+  "enemy.grunt.hit",
+  "enemy.scout.idle",
+  "enemy.scout.hit",
+  "enemy.brute.idle",
+  "enemy.brute.hit",
+  "weapon.handOpen",
+  "weapon.handFist",
+  "weapon.hitSplash",
+];
+
+function realImagePaths(slot: AssetSlot): string[] {
+  return REAL_SPRITE_FRAMES[slot] ?? [ASSET_MANIFEST[slot].path];
+}
+
+const realImages = new Map<string, HTMLImageElement>();
+
+// Resolved against document.baseURI (not a root-relative "/sprites/…") so the
+// same build works whether it's served at a domain root or a GitHub Pages
+// subpath like username.github.io/repo/.
+function resolveAssetUrl(path: string): string {
+  return new URL(path, document.baseURI).href;
+}
+
+function loadRealImage(path: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      realImages.set(path, img);
+      resolve();
+    };
+    img.onerror = () => resolve(); // leave the procedural fallback in place
+    img.src = resolveAssetUrl(path);
+  });
+}
+
+/** Kicks off loading every real sprite PNG the game ships, in parallel.
+ * Fire-and-forget from main.ts — never awaited before first render, so a
+ * slow load never delays instant-start; frames just start out procedural and
+ * swap to real art the moment each file lands. */
+export function preloadRealSprites(): Promise<void> {
+  if (typeof document === "undefined") return Promise.resolve();
+  const paths = new Set<string>();
+  for (const slot of REAL_ASSET_SLOTS) for (const p of realImagePaths(slot)) paths.add(p);
+  return Promise.all([...paths].map(loadRealImage)).then(() => undefined);
+}
+
 /** Returns a generated sprite frame for a slot, or null if that slot has no
  * generator yet (callers fall back to ASSET_MANIFEST's placeholder color) or
  * no DOM is available (e.g. a non-browser test environment). `frame` selects
- * an animation frame by index, wrapping if the slot has fewer frames. */
-export function getSpriteImage(slot: AssetSlot, frame = 0): HTMLCanvasElement | null {
+ * an animation frame by index, wrapping if the slot has fewer frames. A real
+ * preloaded PNG (see preloadRealSprites) always wins over the procedural
+ * generator when both are available. */
+export function getSpriteImage(slot: AssetSlot, frame = 0): HTMLCanvasElement | HTMLImageElement | null {
   if (typeof document === "undefined") return null;
+
+  const candidates = realImagePaths(slot);
+  if (candidates.length > 0) {
+    const real = realImages.get(candidates[frame % candidates.length]);
+    if (real) return real;
+  }
 
   let frames = frameCache.get(slot);
   if (!frames) {

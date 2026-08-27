@@ -84,6 +84,12 @@ interface Billboard {
   fallbackColor: string;
   scale: number;
   alpha: number;
+  /** "floor" anchors the sprite's bottom edge to the ground plane at its own
+   * depth (feet-on-floor, for characters with a real, non-square aspect
+   * ratio); "center" keeps the old behavior of centering on the horizon
+   * (pickups/projectiles/particles/the exit marker, which read fine either
+   * way and aren't worth re-tuning). */
+  anchor: "floor" | "center";
 }
 
 function collectBillboards(state: GameState): Billboard[] {
@@ -102,6 +108,7 @@ function collectBillboards(state: GameState): Billboard[] {
       fallbackColor: ASSET_MANIFEST[`enemy.${enemy.kind}.idle`].placeholderColor,
       scale: enemy.kind === "brute" ? BRUTE_SCALE : ENEMY_SCALE,
       alpha: 1,
+      anchor: "floor",
     });
   }
 
@@ -110,7 +117,7 @@ function collectBillboards(state: GameState): Billboard[] {
     const slot: AssetSlot = pickup.kind === "ammo" ? "icon.ammo" : "icon.health";
     // Gentle blink so a pickup reads as interactive without any label.
     const blink = 0.7 + 0.3 * Math.sin(state.elapsed * 4 + pickup.id);
-    billboards.push({ x: pickup.pos.x, y: pickup.pos.y, slot, frame: 0, fallbackColor: ASSET_MANIFEST[slot].placeholderColor, scale: PICKUP_SCALE, alpha: blink });
+    billboards.push({ x: pickup.pos.x, y: pickup.pos.y, slot, frame: 0, fallbackColor: ASSET_MANIFEST[slot].placeholderColor, scale: PICKUP_SCALE, alpha: blink, anchor: "center" });
   }
 
   for (const projectile of state.projectiles as Projectile[]) {
@@ -123,11 +130,12 @@ function collectBillboards(state: GameState): Billboard[] {
       fallbackColor: ASSET_MANIFEST.projectile.placeholderColor,
       scale: PROJECTILE_SCALE,
       alpha: 1,
+      anchor: "center",
     });
   }
 
   for (const particle of state.particles as Particle[]) {
-    billboards.push({ x: particle.pos.x, y: particle.pos.y, slot: null, frame: 0, fallbackColor: particle.color, scale: 0.15, alpha: Math.max(0, particle.ttl / particle.maxTtl) });
+    billboards.push({ x: particle.pos.x, y: particle.pos.y, slot: null, frame: 0, fallbackColor: particle.color, scale: 0.15, alpha: Math.max(0, particle.ttl / particle.maxTtl), anchor: "center" });
   }
 
   const exitUnlocked = state.enemies.every((e) => !e.alive);
@@ -140,6 +148,7 @@ function collectBillboards(state: GameState): Billboard[] {
     fallbackColor: exitUnlocked ? COLOR_ICE : COLOR_FLOOR,
     scale: EXIT_SCALE * (pulse ? 1.08 : 1),
     alpha: 1,
+    anchor: "center",
   });
 
   return billboards;
@@ -171,24 +180,48 @@ function drawBillboards(ctx: CanvasRenderingContext2D, state: GameState, dirX: n
 
     if (transformY <= 0.05) continue;
 
-    const spriteScreenX = Math.floor((INTERNAL_WIDTH / 2) * (1 + transformX / transformY));
-    const spriteSize = Math.abs(Math.floor((INTERNAL_HEIGHT / transformY) * b.scale));
-    if (spriteSize <= 0) continue;
-
-    const drawStartX = Math.max(0, -Math.floor(spriteSize / 2) + spriteScreenX);
-    const drawEndX = Math.min(INTERNAL_WIDTH, Math.floor(spriteSize / 2) + spriteScreenX);
-    const drawStartY = Math.max(0, -Math.floor(spriteSize / 2) + HORIZON_Y);
-    const drawEndY = Math.min(INTERNAL_HEIGHT, Math.floor(spriteSize / 2) + HORIZON_Y);
-    const spriteLeft = spriteScreenX - spriteSize / 2;
-
     const image = b.slot ? getSpriteImage(b.slot, b.frame) : null;
+
+    // Same reference height a wall at this exact depth would draw at
+    // (INTERNAL_HEIGHT / transformY, unscaled) — used both to size the
+    // sprite via its own scale factor and, for floor-anchored sprites, to
+    // find the ground line at this depth independent of that scale.
+    const wallLineHeight = INTERNAL_HEIGHT / transformY;
+    const spriteHeight = Math.abs(Math.floor(wallLineHeight * b.scale));
+    if (spriteHeight <= 0) continue;
+
+    // Width follows the source image's real aspect ratio instead of being
+    // forced equal to height — previously every billboard was square
+    // regardless of its art, which is why non-square real sprites (people,
+    // robots) looked stretched/cropped.
+    const aspect = image ? image.width / image.height : 1;
+    const spriteWidth = Math.max(1, Math.floor(spriteHeight * aspect));
+
+    const spriteScreenX = Math.floor((INTERNAL_WIDTH / 2) * (1 + transformX / transformY));
+    const drawStartX = Math.max(0, -Math.floor(spriteWidth / 2) + spriteScreenX);
+    const drawEndX = Math.min(INTERNAL_WIDTH, Math.floor(spriteWidth / 2) + spriteScreenX);
+    const spriteLeft = spriteScreenX - spriteWidth / 2;
+
+    let drawStartY: number;
+    let drawEndY: number;
+    if (b.anchor === "floor") {
+      // The floor line a wall at this depth would show, i.e. feet planted on
+      // the ground plane rather than the sprite centered on the horizon.
+      const floorY = HORIZON_Y + wallLineHeight / 2;
+      drawEndY = Math.min(INTERNAL_HEIGHT, Math.floor(floorY));
+      drawStartY = Math.max(0, Math.floor(floorY - spriteHeight));
+    } else {
+      drawStartY = Math.max(0, -Math.floor(spriteHeight / 2) + HORIZON_Y);
+      drawEndY = Math.min(INTERNAL_HEIGHT, Math.floor(spriteHeight / 2) + HORIZON_Y);
+    }
+
     ctx.globalAlpha = b.alpha;
 
     if (image) {
       const srcW = image.width;
       for (let stripe = drawStartX; stripe < drawEndX; stripe++) {
         if (transformY >= zBuffer[stripe]) continue;
-        const texX = Math.min(srcW - 1, Math.max(0, Math.floor(((stripe - spriteLeft) / spriteSize) * srcW)));
+        const texX = Math.min(srcW - 1, Math.max(0, Math.floor(((stripe - spriteLeft) / spriteWidth) * srcW)));
         ctx.drawImage(image, texX, 0, 1, image.height, stripe, drawStartY, 1, drawEndY - drawStartY);
       }
     } else {
@@ -212,11 +245,30 @@ function drawWeapon(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   if (image) {
     ctx.drawImage(image, x, y, w, h);
-    return;
+  } else {
+    ctx.fillStyle = ASSET_MANIFEST[justFired ? "weapon.fire" : "weapon.idle"].placeholderColor;
+    ctx.fillRect(x, y, w, h);
   }
 
-  ctx.fillStyle = ASSET_MANIFEST[justFired ? "weapon.fire" : "weapon.idle"].placeholderColor;
-  ctx.fillRect(x, y, w, h);
+  // Optional dress-up only, layered on top of the housing above (which stays
+  // the procedural silver-gray disc launcher either way): a gripping hand and
+  // a muzzle hit-splash decal, drawn only once their real PNGs have loaded —
+  // no procedural fallback shape for these, they just don't appear yet.
+  const hand = getSpriteImage(justFired ? "weapon.handFist" : "weapon.handOpen");
+  if (hand) {
+    const handW = 18;
+    const handH = Math.round(handW * (hand.height / hand.width));
+    ctx.drawImage(hand, x + w - handW * 0.55, y + h - handH * 0.75, handW, handH);
+  }
+
+  if (justFired) {
+    const splash = getSpriteImage("weapon.hitSplash");
+    if (splash) {
+      const splashW = 14;
+      const splashH = Math.round(splashW * (splash.height / splash.width));
+      ctx.drawImage(splash, x + w / 2 - splashW / 2, y - splashH * 0.5, splashW, splashH);
+    }
+  }
 }
 
 const FLOOR_DITHER = 8;

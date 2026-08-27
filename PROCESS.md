@@ -11,9 +11,13 @@ oversized against a small player scale, seven enemies across three kinds
 hitscan fire against slow dodgeable enemy projectiles (now actually rendered,
 not just simulated), ammo/health pickups, and a win/loss loop with no menu,
 tutorial, or on-screen text — the controls are meant to be discoverable in the
-first few seconds of play. All wall textures, sprites, the weapon, and the
-share card are procedurally drawn at runtime from a single sprite factory
-(`src/game/assets.ts`); nothing was downloaded.
+first few seconds of play. Wall textures, pickups, projectiles, the exit
+marker, and the weapon housing are still procedurally drawn at runtime from a
+single sprite factory (`src/game/assets.ts`); a small, curated set of real
+CC0 sprites and sound effects was added on top for the three enemy kinds, the
+weapon's hand grip, and a hit-splash decal, with async loading and a
+procedural fallback if a file fails — see `THIRD_PARTY_ASSETS.md` for exactly
+what was used, from where, and under what license.
 
 ## The moments that mattered
 
@@ -120,15 +124,31 @@ share card are procedurally drawn at runtime from a single sprite factory
    resolution) is now split evenly above and below the whole group instead of
    stranded in the middle.
 
+7. **Fixing the square-billboard bug required separating "how big" from "how
+   anchored."** Every sprite billboard (walls aside) was being sized as a
+   single square and centered on the horizon, which happened to look fine
+   only because every procedural sprite canvas was itself roughly square.
+   Once real, non-square PNGs (people, robots) were dropped in, they came out
+   visibly squashed. The fix computes width from the source image's own
+   aspect ratio against a shared reference height (`INTERNAL_HEIGHT /
+   transformY`, the same value walls use), and separately anchors character
+   sprites' feet to the floor line a wall at that depth would show, rather
+   than centering them — pickups/projectiles/particles/the exit marker keep
+   the old center-anchor behavior since they read fine either way.
+   `drawBillboards` in `src/game/renderer.ts`.
+
 ## Known limitations / left as placeholder
 
-- All visuals are procedurally-drawn flat-color/geometric-shape placeholders
-  generated at runtime (checkerboard wall textures, mascot/robot enemies,
-  the disc launcher, the share card) — no art, audio, or text assets were
-  downloaded from anywhere, including from the real 1998 game this concept
-  was inspired by; nothing of that game's name, logo, maps, sprites, or audio
-  was reused or extracted.
-- No audio: hits, shots, and death bursts are silent and visual-only.
+- Most visuals are still procedurally-drawn flat-color/geometric-shape
+  placeholders generated at runtime (wall textures, pickups, projectiles, the
+  exit marker, the weapon housing, the share card); nothing of the real 1998
+  game this concept was inspired by was reused — no name, logo, maps,
+  sprites, or audio. A small set of real CC0 sprites/sounds was added for the
+  enemies, the weapon's hand grip, and its hit-splash — see
+  `THIRD_PARTY_ASSETS.md`.
+- Audio is minimal: seven short cues (fire, enemy hit, enemy death, player
+  hurt, two pickup types, door open), unlocked after the first keyboard/touch
+  interaction per browser autoplay policy. No background music.
 - The headless playtest bot used to verify winnability (moment 5) is a
   scripted proxy for a human, not a real cold-start playtester; the
   Playwright e2e suite and manual play (moments 1, 4, 6) cover real browser

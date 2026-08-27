@@ -22,3 +22,9 @@ mise.local.toml
 # your course API key, and this repo goes public when you ship. Your tracked
 # harness is CLAUDE.md (and any AGENTS.md), not this directory.
 .claude/
+
+# Raw downloaded third-party asset packs (spritesheets, ZIPs, license files)
+# used as source material for public/sprites and public/audio. Only the small,
+# cropped/recolored/renamed files actually shipped belong in the repo — see
+# THIRD_PARTY_ASSETS.md. This folder is the local working copy, never committed.
+assets/

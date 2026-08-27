@@ -5,7 +5,24 @@ import { createInitialState, update } from "./src/game/state";
 import { createInputState, attachInput } from "./src/game/input";
 import { renderFrame } from "./src/game/renderer";
 import { getHudRefs, updateHud } from "./src/game/hud";
+import { preloadRealSprites } from "./src/game/assets";
+import { createAudioSnapshot, playEventSounds, unlockAudio } from "./src/game/audio";
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH, MAX_DT } from "./src/game/constants";
+
+// Best-effort, non-blocking: real PNGs swap in as they land, but nothing here
+// ever waits on them, so the instant-start requirement is unaffected.
+void preloadRealSprites();
+
+// Browser autoplay policy blocks sound until a real user gesture; the first
+// keydown or touchstart (keyboard or touch controls, either counts) unlocks
+// every subsequent playSound() call for the rest of the session.
+function unlockAudioOnce(): void {
+  unlockAudio();
+  window.removeEventListener("keydown", unlockAudioOnce);
+  window.removeEventListener("touchstart", unlockAudioOnce);
+}
+window.addEventListener("keydown", unlockAudioOnce);
+window.addEventListener("touchstart", unlockAudioOnce);
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas")!;
 const ctx = canvas.getContext("2d")!;
@@ -18,6 +35,7 @@ const touchControls = document.querySelector<HTMLElement>("#touch-controls")!;
 let state = createInitialState();
 const input = createInputState();
 const hudRefs = getHudRefs(document);
+let audioSnapshot = createAudioSnapshot(state);
 
 attachInput(input, {
   canvas,
@@ -80,6 +98,7 @@ function frame(time: number): void {
   lastTime = time;
 
   state = update(state, input, dt);
+  audioSnapshot = playEventSounds(audioSnapshot, state);
   renderFrame(ctx, state);
   updateHud(state, hudRefs);
 }
