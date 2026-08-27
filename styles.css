@@ -1,9 +1,12 @@
 :root {
-  --lavender: #d9c9e8;
-  --cyan: #8fd6d0;
-  --light-blue: #a9c7d8;
-  --gray: #6b7680;
-  --ink: #22282e;
+  --cyan: #9de1e2;
+  --ice: #bcd8ea;
+  --lavender: #b7a6e5;
+  --pink: #db72b5;
+  --peach: #f1a36b;
+  --cream: #ffe7a1;
+  --floor: #71869b;
+  --ink: #26364c;
 }
 
 * {
@@ -39,57 +42,66 @@ body {
   position: fixed;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--gray);
+  background: var(--floor);
+}
+
+#game-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 #game-canvas {
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
+  width: 100%;
+  height: auto;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  display: block;
+  border: 2px solid var(--ink);
+  border-bottom: none;
 }
 
 #hud {
-  position: fixed;
-  top: max(0.75rem, env(safe-area-inset-top));
-  left: 0;
-  right: 0;
   display: flex;
-  justify-content: center;
-  gap: 1.5rem;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  background: linear-gradient(180deg, var(--cyan) 0%, var(--lavender) 100%);
+  border: 2px solid var(--ink);
+  border-top-width: 1px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
   pointer-events: none;
 }
 
 .hud-item {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.7rem;
-  background: rgb(217 201 232 / 78%);
-  border: 2px solid var(--ink);
-  border-radius: 0.4rem;
+  gap: 0.3rem;
   color: var(--ink);
-  font: 700 1.1rem/1 system-ui, sans-serif;
+  font: 700 0.95rem/1 "Courier New", ui-monospace, monospace;
 }
 
 .hud-icon {
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
+/* Docked directly under #game-stage as a normal flex sibling (not a fixed
+   overlay) so the two sit flush together and get centered as one block —
+   a fixed overlay here left a stray gap between the HUD and the buttons,
+   which is the "gray void" this whole layout exists to avoid. */
 #touch-controls {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: max(1rem, env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 480px;
   display: none;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 0 1rem;
-  pointer-events: none;
+  padding: 0.85rem 1rem max(0.85rem, env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .touch-cluster {
@@ -104,7 +116,7 @@ body {
   height: 3.4rem;
   border-radius: 50%;
   border: 2px solid var(--ink);
-  background: rgb(169 199 216 / 85%);
+  background: rgb(188 216 234 / 88%);
   color: var(--ink);
   display: flex;
   align-items: center;
@@ -121,7 +133,7 @@ body {
 .touch-fire {
   width: 4.2rem;
   height: 4.2rem;
-  background: rgb(224 122 122 / 85%);
+  background: rgb(241 163 107 / 88%);
   pointer-events: auto;
   align-self: flex-end;
 }
@@ -143,7 +155,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(34 40 46 / 55%);
+  background: rgb(38 54 76 / 45%);
 }
 
 /* The `hidden` attribute's UA-stylesheet `display: none` loses to the ID rule
@@ -153,11 +165,11 @@ body {
 }
 
 #end-overlay.is-win {
-  background: rgb(122 224 158 / 55%);
+  background: rgb(157 225 226 / 60%);
 }
 
 #end-overlay.is-lose {
-  background: rgb(224 122 122 / 55%);
+  background: rgb(241 163 107 / 55%);
 }
 
 .retry-btn {
@@ -165,7 +177,7 @@ body {
   height: 4.5rem;
   border-radius: 50%;
   border: 3px solid var(--ink);
-  background: rgb(217 201 232 / 95%);
+  background: rgb(183 166 229 / 95%);
   color: var(--ink);
   display: flex;
   align-items: center;

@@ -11,6 +11,10 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas")!;
 const ctx = canvas.getContext("2d")!;
 ctx.imageSmoothingEnabled = false;
 
+const gameStage = document.querySelector<HTMLElement>("#game-stage")!;
+const hud = document.querySelector<HTMLElement>("#hud")!;
+const touchControls = document.querySelector<HTMLElement>("#touch-controls")!;
+
 let state = createInitialState();
 const input = createInputState();
 const hudRefs = getHudRefs(document);
@@ -25,10 +29,27 @@ attachInput(input, {
   retry: document.querySelector("#btn-retry"),
 });
 
+function isTouchLayout(): boolean {
+  return window.matchMedia("(hover: none), (pointer: coarse)").matches;
+}
+
+// The HUD bar and (on touch) the on-screen controls have their own
+// screen-space height regardless of canvas scale, so they must be subtracted
+// from the available height *before* fitting the canvas — otherwise the
+// canvas is sized against the full viewport and the HUD/touch UI either
+// overlaps it or pushes it off-screen, which is what produced the old
+// large-gray-void bug on tall phone viewports.
 function resizeCanvas(): void {
-  const scale = Math.min(window.innerWidth / INTERNAL_WIDTH, window.innerHeight / INTERNAL_HEIGHT);
-  canvas.style.width = `${INTERNAL_WIDTH * scale}px`;
-  canvas.style.height = `${INTERNAL_HEIGHT * scale}px`;
+  const hudHeight = hud.getBoundingClientRect().height || 40;
+  const touchHeight = isTouchLayout() ? touchControls.getBoundingClientRect().height + 24 : 0;
+  const availableWidth = window.innerWidth;
+  const availableHeight = Math.max(120, window.innerHeight - hudHeight - touchHeight);
+  const scale = Math.min(availableWidth / INTERNAL_WIDTH, availableHeight / INTERNAL_HEIGHT);
+  const width = INTERNAL_WIDTH * scale;
+  const height = INTERNAL_HEIGHT * scale;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  gameStage.style.width = `${width}px`;
 }
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("orientationchange", resizeCanvas);
