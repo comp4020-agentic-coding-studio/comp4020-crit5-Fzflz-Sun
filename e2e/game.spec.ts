@@ -5,6 +5,12 @@ import { test, expect } from "@playwright/test";
 
 test.describe("desktop", () => {
   test("loads straight into gameplay and a shot drops the HUD enemy count", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(String(err)));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+
     await page.goto("/");
 
     const canvas = page.locator("#game-canvas");
@@ -26,6 +32,8 @@ test.describe("desktop", () => {
 
     await expect(page.locator("#hud-enemies-value")).toHaveText("6");
     await expect(page.locator("#hud-ammo-value")).toHaveText("23");
+
+    expect(errors, `console/page errors during play: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
   test("moving forward changes position without any wall-clipping error", async ({ page }) => {
@@ -57,5 +65,34 @@ test.describe("mobile", () => {
     await fireButton.tap();
     await page.waitForTimeout(150);
     await expect(page.locator("#hud-ammo-value")).toHaveText("23");
+  });
+
+  test("every touch button meets the 44x44 tap-target minimum", async ({ page }) => {
+    await page.goto("/");
+    const ids = ["btn-turn-left", "btn-forward", "btn-turn-right", "btn-backward", "btn-fire"];
+    for (const id of ids) {
+      const box = await page.locator(`#${id}`).boundingBox();
+      expect(box?.width ?? 0, `#${id} width`).toBeGreaterThanOrEqual(44);
+      expect(box?.height ?? 0, `#${id} height`).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("the game stage fills the available width and never overlaps the touch UI", async ({ page }) => {
+    // The 320x200 internal resolution is a fixed 1.6:1 aspect ratio (kept for
+    // pixelated nearest-neighbor rendering), so on a narrow tall phone the
+    // canvas is always width-bound and real letterboxing above/below is
+    // unavoidable — that isn't the bug this guards against. The actual old
+    // bug was the HUD and touch buttons floating as unreserved fixed overlays
+    // on top of the canvas/each other. This checks the fix: the canvas claims
+    // essentially the full viewport width, the HUD sits flush under it with
+    // no gap or overlap, and the touch controls never overlap the canvas.
+    await page.goto("/");
+    const canvasBox = (await page.locator("#game-canvas").boundingBox())!;
+    const hudBox = (await page.locator("#hud").boundingBox())!;
+    const touchBox = (await page.locator("#touch-controls").boundingBox())!;
+
+    expect(canvasBox.width).toBeGreaterThan(390 * 0.9);
+    expect(Math.abs(hudBox.y - (canvasBox.y + canvasBox.height))).toBeLessThan(4);
+    expect(touchBox.y).toBeGreaterThanOrEqual(canvasBox.y + canvasBox.height - 1);
   });
 });
