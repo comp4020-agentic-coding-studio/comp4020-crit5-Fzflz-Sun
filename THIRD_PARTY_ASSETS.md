@@ -11,6 +11,17 @@ them here is done anyway as good practice, not because CC0 requires it.
 
 ## Images — `public/sprites/`
 
+**Source:** [LAB](https://mutantleg.itch.io/lab) by **Mutantleg**, itch.io. The
+downloadable texture pack bundled with the game (`lab_texture.zip`) ships a
+`readme.txt` stating "all these gfx is hereby public domain (CC0)". Three
+files from the pack's `wall/` and `door/` folders were used.
+
+| File used | Source file | Modifications |
+|---|---|---|
+| `wall-a.png` | `LAB/wall/tile087.png` (a vertical vent/locker panel) | Recolored via 3-band luminance quantization to the game's fixed palette (ink outline, slate-blue mid-tone, ice highlight). No resize — source was already 64×64, matching the wall-texture slot's native size. |
+| `wall-b.png` | `LAB/wall/tile065.png` (a brick pattern) | Same pipeline, recolored to ink/slate-blue/lavender so the two wall kinds stay visually distinct at a glance. |
+| `door.png` | `LAB/door/door0.png` (a double door) | Same pipeline, recolored to ink/peach/cyan — matching the peach body and cyan "window" the procedural door placeholder already used. |
+
 **Source:** [Front-facing robot and pixel characters](https://opengameart.org/content/front-facing-robot-and-pixel-characters)
 by **Bigelowed**, OpenGameArt.org, CC0.
 Two files from this submission were used: `pixl-ppl.png` and
@@ -58,8 +69,11 @@ as-is, still their original format and encoding).
 
 ## Not used
 
-The source folder these were selected from also contained several other CC0
-packs (wall textures, a splash/slime SFX pack, a procedural music pack) that
-were evaluated but not included, to keep this integration a small, targeted
-subset rather than a bulk asset-pack import: wall/floor textures stay
-procedural, and no background music was added.
+The source folder these were selected from also contained an unrelated
+"old-school FPS wall textures" pack whose original author/license could not be
+verified (no readme, no traceable listing page), so it was left out entirely —
+`LAB`'s explicitly-CC0 pack was used for walls and the door instead. A
+splash/slime SFX pack and a procedural music pack from the same source folder
+were also evaluated but not included, to keep this integration a small,
+targeted subset rather than a bulk asset-pack import: no background music was
+added.

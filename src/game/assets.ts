@@ -1,9 +1,11 @@
 // Central manifest of every art slot the game needs, plus a procedural pixel
 // sprite factory that renders each one to an offscreen canvas the first time
-// it's asked for. No PNGs are downloaded or shipped — every sprite here is
-// drawn from flat color blocks at runtime. The renderer only ever asks this
-// module for a slot, never draws a hardcoded shape itself, so dropping in
-// real PNGs later is a manifest + generator edit, not a rendering-code edit.
+// it's asked for. Most slots still draw from flat color blocks at runtime; a
+// small curated set loads a real PNG instead (see the "Real-image preloading"
+// section below and THIRD_PARTY_ASSETS.md), always falling back to the
+// procedural drawing if that file isn't loaded yet. The renderer only ever
+// asks this module for a slot, never draws a hardcoded shape itself, so
+// swapping a slot's source is a manifest edit, not a rendering-code edit.
 import { COLOR_CREAM, COLOR_CYAN, COLOR_FLOOR, COLOR_ICE, COLOR_INK, COLOR_LAVENDER, COLOR_PEACH, COLOR_PINK } from "./constants";
 import type { EnemyKind } from "./types";
 
@@ -424,14 +426,14 @@ function generateFrames(slot: AssetSlot): HTMLCanvasElement[] | null {
 }
 
 // ---------------------------------------------------------------------------
-// Real-image preloading. A small, curated subset of slots (three enemy kinds'
-// idle/hit frames, plus the weapon's hand/hit-splash overlays) can load an
-// actual PNG from /public/sprites instead of the procedural drawing above.
-// Everything else — walls, doors, icons, the weapon housing itself — stays
-// procedural; this is an opt-in list, not a blanket replacement. Loading is
-// async and best-effort: a slot with no successfully-loaded image just keeps
-// using its procedural generator, so a slow network or a missing file never
-// blocks or breaks the game.
+// Real-image preloading. A small, curated subset of slots (the two wall
+// textures, the door, three enemy kinds' idle/hit frames, and the weapon's
+// hand/hit-splash overlays) can load an actual PNG from /public/sprites
+// instead of the procedural drawing above. Everything else — icons, the
+// weapon housing itself — stays procedural; this is an opt-in list, not a
+// blanket replacement. Loading is async and best-effort: a slot with no
+// successfully-loaded image just keeps using its procedural generator, so a
+// slow network or a missing file never blocks or breaks the game.
 // ---------------------------------------------------------------------------
 
 // Idle sets have two real frames (a hand-authored "bob"); hit sets have one.
@@ -445,9 +447,12 @@ const REAL_SPRITE_FRAMES: Partial<Record<AssetSlot, string[]>> = {
   "enemy.brute.hit": ["sprites/enemy-brute-hit.png"],
 };
 
-// Only these slots are ever fetched as real PNGs — everything else (walls,
-// icons, the weapon housing) has no shipped file and stays procedural.
+// Only these slots are ever fetched as real PNGs — everything else (icons,
+// the weapon housing) has no shipped file and stays procedural.
 const REAL_ASSET_SLOTS: AssetSlot[] = [
+  "wall.a",
+  "wall.b",
+  "door",
   "enemy.grunt.idle",
   "enemy.grunt.hit",
   "enemy.scout.idle",

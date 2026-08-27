@@ -30,6 +30,9 @@ const totalBytes = (files: string[]) => files.reduce((sum, f) => sum + statSync(
 // THIRD_PARTY_ASSETS.md, not grown by accident.
 const ALLOWED_IMAGE_FILES = new Set([
   "card.png",
+  "wall-a.png",
+  "wall-b.png",
+  "door.png",
   "enemy-grunt-idle-0.png",
   "enemy-grunt-idle-1.png",
   "enemy-grunt-hit.png",
