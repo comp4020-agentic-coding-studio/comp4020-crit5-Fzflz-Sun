@@ -2,12 +2,18 @@
 
 ## What I built
 
-A browser-playable, Canvas-2D pseudo-3D shooter in the style of mid-90s
-shareware raycasters: one fixed level of four connected rooms, seven enemies
-across three kinds, hitscan player fire against slow dodgeable enemy
-projectiles, ammo/health pickups, and a win/loss loop with no menu, tutorial,
-or on-screen text — the controls are meant to be discoverable in the first few
-seconds of play.
+**PIE HALL 98** — a browser-playable, Canvas-2D pseudo-3D shooter in the style
+of mid-90s edutainment raycasters (an original game, not a clone of any real
+1998 title): one fixed level of four connected school-hall rooms (Entrance
+Hall, Locker Corridor, Lab Classroom, Activity Room) built deliberately
+oversized against a small player scale, seven enemies across three kinds
+(reframed as mascots and cleaning/vending robots), a "cream disc launcher" for
+hitscan fire against slow dodgeable enemy projectiles (now actually rendered,
+not just simulated), ammo/health pickups, and a win/loss loop with no menu,
+tutorial, or on-screen text — the controls are meant to be discoverable in the
+first few seconds of play. All wall textures, sprites, the weapon, and the
+share card are procedurally drawn at runtime from a single sprite factory
+(`src/game/assets.ts`); nothing was downloaded.
 
 ## The moments that mattered
 
@@ -76,8 +82,55 @@ seconds of play.
    same way: the view now keeps advancing instead of freezing.
    [`27c4738`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/27c4738).
 
+5. **Widening the corridors for the tiny-character/huge-room redesign
+   introduced a new softlock, and a scripted playtest bot found it, not
+   manual play.** The redesign calls for 2-3 tile wide corridors instead of
+   single-file passages. `updateDoors()` opened each door cell based on
+   distance to that cell's own center, which was fine for a 1-wide doorway
+   but left real gaps once a doorway became 3 adjacent door cells: there are
+   x-positions directly between two door centers where the player's own
+   collision radius stops them further than `DOOR_OPEN_RADIUS` from every
+   individual door's center, so the door never opens no matter how squarely
+   they approach. I found this by writing a throwaway headless bot that drove
+   the real `update()` loop toward a series of waypoints and got stuck dead at
+   the A→D corridor mouth for the entire simulated time budget with position
+   frozen. Fixed by measuring distance to the nearest point of the door's own
+   cell rectangle instead of its center, which makes the trigger uniform
+   across the doorway's full width — confirmed by re-running the same bot to
+   a real `phase: 'won'` in ~40 simulated seconds, well inside the 5-minute
+   budget. `updateDoors()` in `src/game/level.ts`.
+
+6. **The reported "large gray void" bug on tall phone viewports had two
+   separate causes, and fixing only the obvious one didn't fix the bug.** The
+   first cause was `resizeCanvas()` fitting the canvas against the full
+   viewport height without reserving room for the HUD bar or, on touch, the
+   on-screen controls — fixed by measuring their real rendered heights via
+   `getBoundingClientRect()` and subtracting before fitting. Screenshotting
+   the result at 390x844 after that fix still showed a large dead gap,
+   because `#touch-controls` was a `position: fixed` overlay anchored
+   independently to the viewport bottom, while `#game-stage` (canvas+HUD) was
+   centered in the *whole* viewport by `#game-root` — the two blocks had no
+   relationship to each other, so the space `resizeCanvas()` had correctly
+   reserved for the touch controls just became a gap between them instead. I
+   would not have caught this from the layout code alone; only an actual
+   screenshot at the mobile viewport showed it. Fixed by making
+   `#touch-controls` a normal flex sibling of `#game-stage` so the two dock
+   together and get centered as one block — any letterboxing left over (real,
+   and unavoidable while keeping the fixed 320x200 / 1.6:1 internal
+   resolution) is now split evenly above and below the whole group instead of
+   stranded in the middle.
+
 ## Known limitations / left as placeholder
 
-- All visuals are procedurally-drawn flat-color placeholders (checkerboard
-  wall textures, solid-shape enemies/weapon) — no art assets were downloaded
-  or produced, per this deliverable's scope.
+- All visuals are procedurally-drawn flat-color/geometric-shape placeholders
+  generated at runtime (checkerboard wall textures, mascot/robot enemies,
+  the disc launcher, the share card) — no art, audio, or text assets were
+  downloaded from anywhere, including from the real 1998 game this concept
+  was inspired by; nothing of that game's name, logo, maps, sprites, or audio
+  was reused or extracted.
+- No audio: hits, shots, and death bursts are silent and visual-only.
+- The headless playtest bot used to verify winnability (moment 5) is a
+  scripted proxy for a human, not a real cold-start playtester; the
+  Playwright e2e suite and manual play (moments 1, 4, 6) cover real browser
+  timing and real input, but a live human playtest is still worth doing
+  before calling the difficulty/pacing tuning final.
