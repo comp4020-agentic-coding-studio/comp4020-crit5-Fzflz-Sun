@@ -5,6 +5,8 @@ import type { Enemy, GameState, LevelMap, Vec2 } from "./types";
 import { castRay } from "./raycast";
 import { moveWithCollision } from "./level";
 import {
+  COLOR_CREAM,
+  COLOR_FLOOR,
   DEATH_PARTICLE_COUNT,
   DEATH_PARTICLE_TTL,
   ENEMY_RADIUS,
@@ -93,6 +95,10 @@ export function applyHitscanDamage(state: GameState, enemy: Enemy, amount: numbe
   }
 }
 
+// A defeated mascot/robot doesn't bleed — it gets coated in cream and its
+// junk parts scatter. Half the burst is cream disc-colored, half is the
+// duller "wreckage" tone, so the shrink-into-junk read comes through even as
+// a handful of flat-colored squares.
 function spawnDeathBurst(state: GameState, pos: Vec2): void {
   for (let i = 0; i < DEATH_PARTICLE_COUNT; i++) {
     const a = (Math.PI * 2 * i) / DEATH_PARTICLE_COUNT;
@@ -102,7 +108,7 @@ function spawnDeathBurst(state: GameState, pos: Vec2): void {
       vel: { x: Math.cos(a) * speed, y: Math.sin(a) * speed },
       ttl: DEATH_PARTICLE_TTL,
       maxTtl: DEATH_PARTICLE_TTL,
-      color: "#f4f1e8",
+      color: i % 2 === 0 ? COLOR_CREAM : COLOR_FLOOR,
     });
   }
 }
@@ -130,6 +136,6 @@ export function handlePlayerFire(state: GameState, renderAngle: number): void {
     vel: { x: 0, y: 0 },
     ttl: MUZZLE_PARTICLE_TTL,
     maxTtl: MUZZLE_PARTICLE_TTL,
-    color: "#fff7cc",
+    color: COLOR_CREAM,
   });
 }

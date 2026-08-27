@@ -11,6 +11,7 @@ import {
   EXIT_RADIUS,
   PICKUP_RADIUS,
   PLAYER_MOVE_SPEED,
+  PLAYER_MOVE_SPEED_BACK,
   PLAYER_RADIUS,
   PLAYER_TURN_SPEED,
   PROJECTILE_RADIUS,
@@ -20,10 +21,10 @@ import {
 
 function makePickups(): Pickup[] {
   const defs: Array<{ kind: Pickup["kind"]; pos: { x: number; y: number }; amount: number }> = [
-    { kind: "health", pos: { x: 2.5, y: 4.5 }, amount: 25 },
-    { kind: "ammo", pos: { x: 16.5, y: 4.5 }, amount: 12 },
-    { kind: "health", pos: { x: 2.5, y: 12.5 }, amount: 25 },
-    { kind: "ammo", pos: { x: 15.5, y: 12.5 }, amount: 12 },
+    { kind: "health", pos: { x: 3, y: 13.5 }, amount: 25 },
+    { kind: "ammo", pos: { x: 19, y: 2.5 }, amount: 12 },
+    { kind: "health", pos: { x: 19, y: 12.5 }, amount: 25 },
+    { kind: "ammo", pos: { x: 7, y: 16.5 }, amount: 12 },
   ];
   return defs.map((d, i) => ({ id: i + 1, kind: d.kind, pos: d.pos, collected: false, amount: d.amount }));
 }
@@ -44,15 +45,16 @@ export function createInitialState(): GameState {
   };
 
   const enemies = [
-    // The one right ahead of the start position: slow and easy, so the very
-    // first move a stranger makes is "walk up and shoot it" — no text needed.
-    spawnEnemy("grunt", { x: 5.5, y: 3.5 }, { speed: 0.15, fireInterval: 4 }),
-    spawnEnemy("grunt", { x: 17, y: 3 }),
-    spawnEnemy("scout", { x: 18.5, y: 2 }),
-    spawnEnemy("grunt", { x: 3, y: 11.5 }),
-    spawnEnemy("scout", { x: 4.5, y: 12 }),
-    spawnEnemy("brute", { x: 17, y: 10 }),
-    spawnEnemy("grunt", { x: 19.5, y: 9.5 }),
+    // The one right ahead of the start position: barely moving and slow to
+    // fire, so the very first move a stranger makes is "walk up and shoot
+    // it" — no text needed, and several seconds of safety while they learn.
+    spawnEnemy("grunt", { x: 6.5, y: 3.5 }, { speed: 0.05, fireInterval: 6 }),
+    spawnEnemy("grunt", { x: 21, y: 3 }),
+    spawnEnemy("scout", { x: 23, y: 6 }),
+    spawnEnemy("scout", { x: 4, y: 15 }),
+    spawnEnemy("brute", { x: 7, y: 12 }),
+    spawnEnemy("brute", { x: 23, y: 12 }),
+    spawnEnemy("grunt", { x: 19, y: 16 }),
   ];
 
   return {
@@ -108,8 +110,9 @@ function updatePlayerMotion(state: GameState, input: InputState, dt: number): vo
 
   const move = (input.forward ? 1 : 0) - (input.backward ? 1 : 0);
   if (move !== 0) {
-    const dx = Math.cos(player.angle) * move * PLAYER_MOVE_SPEED * dt;
-    const dy = Math.sin(player.angle) * move * PLAYER_MOVE_SPEED * dt;
+    const speed = move > 0 ? PLAYER_MOVE_SPEED : PLAYER_MOVE_SPEED_BACK;
+    const dx = Math.cos(player.angle) * move * speed * dt;
+    const dy = Math.sin(player.angle) * move * speed * dt;
     player.pos = moveWithCollision(state.map, player.pos, dx, dy, PLAYER_RADIUS);
   }
 

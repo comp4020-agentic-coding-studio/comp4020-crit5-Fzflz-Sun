@@ -7,10 +7,44 @@ export const INTERNAL_HEIGHT = 200;
 export const FOV_RADIANS = (66 * Math.PI) / 180;
 export const MAX_RENDER_DIST = 20;
 
+// Screen fraction devoted to ceiling above the wall midline. Biased above
+// 0.5 so a room's ceiling reads as taller than its floor even when no wall
+// fills the frame — a cheap 2D projection trick, not real pitch/look.
+export const HORIZON_RATIO = 0.6;
+
+// A textured wall's brightness never drops below this fraction of full
+// brightness, however far away — keeps the space reading as a lit indoor
+// room instead of fading toward a dark dungeon at range.
+export const WALL_BRIGHTNESS_FLOOR = 0.7;
+
+// The bright, low-contrast "cheap educational software" palette. Read by
+// assets.ts's procedural sprite generator so every drawn shape shares one
+// source of truth for color.
+export const COLOR_CYAN = "#9DE1E2";
+export const COLOR_ICE = "#BCD8EA";
+export const COLOR_LAVENDER = "#B7A6E5";
+export const COLOR_PINK = "#DB72B5";
+export const COLOR_PEACH = "#F1A36B";
+export const COLOR_CREAM = "#FFE7A1";
+export const COLOR_FLOOR = "#71869B";
+export const COLOR_INK = "#26364C";
+
 export const PLAYER_RADIUS = 0.2;
-export const PLAYER_MOVE_SPEED = 3.0; // tiles/sec
-export const PLAYER_TURN_SPEED = Math.PI * 1.6; // rad/sec, continuous
+export const PLAYER_MOVE_SPEED = 1.55; // tiles/sec, forward
+export const PLAYER_MOVE_SPEED_BACK = 1.2; // tiles/sec, reverse — deliberately a little slower
+export const PLAYER_TURN_SPEED = (115 * Math.PI) / 180; // rad/sec, continuous — dull, schoolroom-computer turning
 export const RENDER_ANGLE_STEPS = 32; // quantized viewing direction only
+
+// On-screen billboard scale. Small figures in wide rooms is the intended
+// look, so these stay well under 1.
+export const ENEMY_SCALE = 0.62;
+export const BRUTE_SCALE = 0.8;
+export const PICKUP_SCALE = 0.32;
+export const PROJECTILE_SCALE = 0.22;
+export const EXIT_SCALE = 1.0;
+
+export const WEAPON_DRAW_WIDTH = 44;
+export const WEAPON_DRAW_HEIGHT = 38;
 
 export const DOOR_OPEN_RADIUS = 0.75;
 

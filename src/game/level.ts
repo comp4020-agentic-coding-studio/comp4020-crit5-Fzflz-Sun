@@ -1,9 +1,10 @@
-// The one level: four connected rooms carved onto a grid, deterministically
-// (no randomness) so the layout is the same every run and every test.
+// The one level: four wide, deliberately oversized school rooms carved onto a
+// grid, connected by a ring of 3-tile-wide corridors, deterministically (no
+// randomness) so the layout is the same every run and every test.
 import type { Cell, Door, LevelMap } from "./types";
 
-const WIDTH = 23;
-const HEIGHT = 15;
+const WIDTH = 27;
+const HEIGHT = 19;
 
 function index(x: number, y: number): number {
   return y * WIDTH + x;
@@ -22,30 +23,39 @@ function carve(cells: Cell[], x0: number, y0: number, w: number, h: number, valu
 export function buildLevel(): LevelMap {
   const cells: Cell[] = Array.from({ length: WIDTH * HEIGHT }, () => 1);
 
-  // Room A: start room (top-left). Room B: top-right. Room D: bottom-left.
-  // Room C: bottom-right, holds the exit. A ring of corridors connects all
-  // four, so the map has more than one route once you're past the doors.
-  carve(cells, 1, 1, 6, 5); // Room A
-  carve(cells, 14, 1, 7, 5); // Room B
-  carve(cells, 1, 9, 6, 5); // Room D
-  carve(cells, 14, 9, 7, 5); // Room C
+  // Room A: Entrance Hall (top-left, start room). Room B: Locker Corridor
+  // (top-right, a wide walkway rather than a tight passage). Room D: Lab
+  // Classroom (bottom-left). Room C: Activity Room (bottom-right, holds the
+  // exit). All four rooms are 9x7 — big and mostly empty on purpose, so a
+  // small on-screen character reads as small in a big room.
+  carve(cells, 1, 1, 9, 7); // Room A — Entrance Hall
+  carve(cells, 17, 1, 9, 7); // Room B — Locker Corridor
+  carve(cells, 1, 11, 9, 7); // Room D — Lab Classroom
+  carve(cells, 17, 11, 9, 7); // Room C — Activity Room
 
-  carve(cells, 7, 3, 7, 1); // corridor A -> B (door at x=10)
-  carve(cells, 17, 6, 1, 3); // corridor B -> C, open
-  carve(cells, 3, 6, 1, 3); // corridor A -> D (door at y=7)
-  carve(cells, 7, 11, 7, 1); // corridor D -> C, open
+  // A ring of 3-tile-wide corridors connects all four rooms, so there are two
+  // routes from the entrance to the exit (via B, or via D) plus the loop
+  // formed by the ring itself.
+  carve(cells, 10, 3, 7, 3); // corridor A -> B (door at x=10)
+  carve(cells, 20, 8, 3, 3); // corridor B -> C, open
+  carve(cells, 4, 8, 3, 3); // corridor A -> D (door at y=8)
+  carve(cells, 10, 13, 7, 3); // corridor D -> C, open
 
   // A couple of interior wall-variant B accents so the raycaster's two wall
   // textures both show up before real art exists. Tucked into far corners,
   // clear of every doorway, sightline and enemy spawn: a cell merely diagonal
   // to a corridor mouth still snags the player's circular collision radius
   // when hugging that wall, even though the doorway itself is unobstructed.
-  cells[index(20, 1)] = 2;
-  cells[index(20, 13)] = 2;
+  cells[index(24, 1)] = 2;
+  cells[index(24, 17)] = 2;
 
   const doors: Door[] = [
     { x: 10, y: 3, open: false },
-    { x: 3, y: 7, open: false },
+    { x: 10, y: 4, open: false },
+    { x: 10, y: 5, open: false },
+    { x: 4, y: 8, open: false },
+    { x: 5, y: 8, open: false },
+    { x: 6, y: 8, open: false },
   ];
 
   return {
@@ -53,7 +63,7 @@ export function buildLevel(): LevelMap {
     height: HEIGHT,
     cells,
     doors,
-    exit: { x: 19, y: 11 },
+    exit: { x: 21, y: 14 },
   };
 }
 
@@ -122,13 +132,23 @@ export function moveWithCollision(map: LevelMap, pos: { x: number; y: number }, 
 }
 
 /** Opens any door within reach of a point. Doors stay open once triggered —
- * this is a toy lab, not a stealth game, and re-closing adds a rule the
- * no-tutorial opening screen would have no way to teach. */
+ * this game has no on-screen instructions to teach a re-closing rule, so it
+ * doesn't have one.
+ *
+ * Distance is measured to the nearest point of the door's own unit cell, not
+ * to its center: a wide doorway is several adjacent door cells side by side,
+ * and center-distance leaves gaps directly between two centers (more than
+ * `radius` from either) where the approaching player's own collision radius
+ * stops them before they'd ever cross into any single door's trigger circle
+ * — a softlock straight ahead of a multi-cell doorway. Clamping to the cell
+ * first makes the trigger uniform across the doorway's full width. */
 export function updateDoors(map: LevelMap, point: { x: number; y: number }, radius: number): void {
   for (const door of map.doors) {
     if (door.open) continue;
-    const dx = door.x + 0.5 - point.x;
-    const dy = door.y + 0.5 - point.y;
+    const nearestX = Math.max(door.x, Math.min(point.x, door.x + 1));
+    const nearestY = Math.max(door.y, Math.min(point.y, door.y + 1));
+    const dx = nearestX - point.x;
+    const dy = nearestY - point.y;
     if (Math.hypot(dx, dy) <= radius) door.open = true;
   }
 }

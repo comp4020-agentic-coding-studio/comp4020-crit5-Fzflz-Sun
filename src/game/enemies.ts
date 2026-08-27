@@ -1,5 +1,8 @@
-// Enemy definitions and AI. Two "normal" kinds (grunt, scout) plus one
-// stronger kind (brute) — the asset manifest names the same three.
+// Enemy definitions and AI. Internal kind names (grunt/scout/brute) are kept
+// from the prototyping phase; on screen they're an out-of-control mascot, a
+// cleaning robot, and a vending-machine robot respectively — see assets.ts.
+// Two "normal" kinds (grunt, scout) plus one tougher kind (brute), all tuned
+// low-pressure: slow, sparse fire, plenty of reaction time.
 import type { Enemy, EnemyKind, GameState, Vec2 } from "./types";
 import { hasLineOfSight } from "./raycast";
 import { moveWithCollision } from "./level";
@@ -15,9 +18,9 @@ interface EnemyDef {
 }
 
 export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
-  grunt: { health: 1, speed: 0.9, damage: 6, sightRange: 9, fireInterval: 2.2, projectileSpeed: 2.4 },
-  scout: { health: 2, speed: 1.6, damage: 8, sightRange: 10, fireInterval: 1.6, projectileSpeed: 3.2 },
-  brute: { health: 4, speed: 1.1, damage: 14, sightRange: 11, fireInterval: 1.3, projectileSpeed: 3.6 },
+  grunt: { health: 1, speed: 0.55, damage: 4, sightRange: 9, fireInterval: 3.2, projectileSpeed: 1.6 },
+  scout: { health: 2, speed: 0.9, damage: 5, sightRange: 10, fireInterval: 2.4, projectileSpeed: 2.0 },
+  brute: { health: 4, speed: 0.6, damage: 8, sightRange: 11, fireInterval: 2.0, projectileSpeed: 2.2 },
 };
 
 let enemyIdCounter = 0;
