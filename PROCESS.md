@@ -11,14 +11,14 @@ oversized against a small player scale, seven enemies across three kinds
 hitscan fire against slow dodgeable enemy projectiles (now actually rendered,
 not just simulated), ammo/health pickups, and a win/loss loop with no menu,
 tutorial, or on-screen text — the controls are meant to be discoverable in the
-first few seconds of play. Pickups, projectiles, the exit marker, and the
-weapon housing are still procedurally drawn at runtime from a single sprite
-factory (`src/game/assets.ts`); a small, curated set of real CC0 sprites and
-sound effects was added on top for the two wall textures, the door, the three
-enemy kinds, the weapon's hand grip, and a hit-splash decal, with async
-loading and a procedural fallback if a file fails — see
-`THIRD_PARTY_ASSETS.md` for exactly what was used, from where, and under what
-license.
+first few seconds of play. Pickups, projectiles, and the exit marker are still procedurally drawn at
+runtime from a single sprite factory (`src/game/assets.ts`); a small, curated
+set of real CC0 sprites and sound effects was added on top for the two wall
+textures, the door, the three enemy kinds, and a self-contained 5-frame
+handgun (idle plus a 4-frame fire animation, hand and muzzle flash included
+in the source art itself), with async loading and a procedural fallback if a
+file fails — see `THIRD_PARTY_ASSETS.md` for exactly what was used, from
+where, and under what license.
 
 ## The moments that mattered
 
@@ -142,11 +142,10 @@ license.
 
 - Most visuals are still procedurally-drawn flat-color/geometric-shape
   placeholders generated at runtime (pickups, projectiles, the exit marker,
-  the weapon housing, the share card); nothing of the real 1998 game this
-  concept was inspired by was reused — no name, logo, maps, sprites, or
-  audio. A small set of real CC0 sprites/sounds was added for the two wall
-  textures, the door, the enemies, the weapon's hand grip, and its
-  hit-splash — see `THIRD_PARTY_ASSETS.md`.
+  the share card); nothing of the real 1998 game this concept was inspired by
+  was reused — no name, logo, maps, sprites, or audio. A small set of real
+  CC0 sprites/sounds was added for the two wall textures, the door, the
+  enemies, and the weapon — see `THIRD_PARTY_ASSETS.md`.
 - Audio is minimal: seven short cues (fire, enemy hit, enemy death, player
   hurt, two pickup types, door open), unlocked after the first keyboard/touch
   interaction per browser autoplay policy. No background music.

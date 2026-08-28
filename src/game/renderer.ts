@@ -14,6 +14,7 @@ import {
   COLOR_INK,
   ENEMY_SCALE,
   EXIT_SCALE,
+  FIRE_COOLDOWN,
   FOV_RADIANS,
   HORIZON_RATIO,
   INTERNAL_HEIGHT,
@@ -24,6 +25,7 @@ import {
   WALL_BRIGHTNESS_FLOOR,
   WEAPON_DRAW_HEIGHT,
   WEAPON_DRAW_WIDTH,
+  WEAPON_FIRE_ANIM_DURATION,
 } from "./constants";
 
 const TAN_HALF_FOV = Math.tan(FOV_RADIANS / 2);
@@ -236,38 +238,27 @@ function drawBillboards(ctx: CanvasRenderingContext2D, state: GameState, dirX: n
 }
 
 function drawWeapon(ctx: CanvasRenderingContext2D, state: GameState): void {
-  const justFired = state.player.fireCooldown > 0.18;
-  const image = getSpriteImage(justFired ? "weapon.fire" : "weapon.idle");
+  // FIRE_COOLDOWN counts player.fireCooldown down to 0 after each shot, so
+  // this is seconds elapsed since the shot that's still cooling down. The
+  // four real fire frames (already including the hand and muzzle flash) play
+  // across the first WEAPON_FIRE_ANIM_DURATION of that window, then it's back
+  // to idle for the remainder of the cooldown.
+  const elapsedSinceFire = FIRE_COOLDOWN - state.player.fireCooldown;
+  const firing = elapsedSinceFire >= 0 && elapsedSinceFire < WEAPON_FIRE_ANIM_DURATION;
+  const frame = firing ? Math.min(3, Math.floor((elapsedSinceFire / WEAPON_FIRE_ANIM_DURATION) * 4)) : 0;
+  const slot: AssetSlot = firing ? "weapon.fire" : "weapon.idle";
+
+  const image = getSpriteImage(slot, frame);
   const w = WEAPON_DRAW_WIDTH;
   const h = WEAPON_DRAW_HEIGHT;
   const x = INTERNAL_WIDTH / 2 - w / 2;
-  const y = INTERNAL_HEIGHT - h + (justFired ? 3 : 6); // slight kick on fire
+  const y = INTERNAL_HEIGHT - h;
 
   if (image) {
     ctx.drawImage(image, x, y, w, h);
   } else {
-    ctx.fillStyle = ASSET_MANIFEST[justFired ? "weapon.fire" : "weapon.idle"].placeholderColor;
+    ctx.fillStyle = ASSET_MANIFEST[slot].placeholderColor;
     ctx.fillRect(x, y, w, h);
-  }
-
-  // Optional dress-up only, layered on top of the housing above (which stays
-  // the procedural silver-gray disc launcher either way): a gripping hand and
-  // a muzzle hit-splash decal, drawn only once their real PNGs have loaded —
-  // no procedural fallback shape for these, they just don't appear yet.
-  const hand = getSpriteImage(justFired ? "weapon.handFist" : "weapon.handOpen");
-  if (hand) {
-    const handW = 18;
-    const handH = Math.round(handW * (hand.height / hand.width));
-    ctx.drawImage(hand, x + w - handW * 0.55, y + h - handH * 0.75, handW, handH);
-  }
-
-  if (justFired) {
-    const splash = getSpriteImage("weapon.hitSplash");
-    if (splash) {
-      const splashW = 14;
-      const splashH = Math.round(splashW * (splash.height / splash.width));
-      ctx.drawImage(splash, x + w / 2 - splashW / 2, y - splashH * 0.5, splashW, splashH);
-    }
   }
 }
 

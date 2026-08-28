@@ -42,9 +42,11 @@ const ALLOWED_IMAGE_FILES = new Set([
   "enemy-brute-idle-0.png",
   "enemy-brute-idle-1.png",
   "enemy-brute-hit.png",
-  "weapon-hand-open.png",
-  "weapon-hand-fist.png",
-  "weapon-hit-splash.png",
+  "weapon-idle.png",
+  "weapon-fire-0.png",
+  "weapon-fire-1.png",
+  "weapon-fire-2.png",
+  "weapon-fire-3.png",
 ]);
 
 const ALLOWED_AUDIO_FILES = new Set([

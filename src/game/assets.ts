@@ -24,9 +24,6 @@ export type AssetSlot =
   | "enemy.brute.death"
   | "weapon.idle"
   | "weapon.fire"
-  | "weapon.handOpen"
-  | "weapon.handFist"
-  | "weapon.hitSplash"
   | "projectile"
   | "icon.ammo"
   | "icon.health"
@@ -58,15 +55,8 @@ export const ASSET_MANIFEST: Record<AssetSlot, AssetManifestEntry> = {
   "enemy.brute.idle": { suggestedSize: [64, 80], placeholderColor: COLOR_PEACH, path: "sprites/brute-idle.png" },
   "enemy.brute.hit": { suggestedSize: [64, 80], placeholderColor: COLOR_LAVENDER, path: "sprites/brute-hit.png" },
   "enemy.brute.death": { suggestedSize: [64, 80], placeholderColor: COLOR_FLOOR, path: "sprites/brute-death.png" },
-  "weapon.idle": { suggestedSize: [128, 128], placeholderColor: "#cfd8e3", path: "sprites/weapon-idle.png" },
-  "weapon.fire": { suggestedSize: [128, 128], placeholderColor: COLOR_CREAM, path: "sprites/weapon-fire.png" },
-  // Decorative overlays only — the housing above stays procedural (the
-  // silver-gray cream disc launcher silhouette), these just dress it up when
-  // real art is available. No procedural fallback: drawWeapon skips them
-  // outright if the PNG hasn't loaded, rather than drawing a placeholder box.
-  "weapon.handOpen": { suggestedSize: [26, 36], placeholderColor: COLOR_INK, path: "sprites/weapon-hand-open.png" },
-  "weapon.handFist": { suggestedSize: [29, 36], placeholderColor: COLOR_INK, path: "sprites/weapon-hand-fist.png" },
-  "weapon.hitSplash": { suggestedSize: [16, 20], placeholderColor: COLOR_CREAM, path: "sprites/weapon-hit-splash.png" },
+  "weapon.idle": { suggestedSize: [64, 64], placeholderColor: "#cfd8e3", path: "sprites/weapon-idle.png" },
+  "weapon.fire": { suggestedSize: [64, 64], placeholderColor: COLOR_CREAM, path: "sprites/weapon-fire-0.png" },
   projectile: { suggestedSize: [16, 16], placeholderColor: COLOR_LAVENDER, path: "sprites/projectile.png" },
   "icon.ammo": { suggestedSize: [32, 32], placeholderColor: COLOR_CREAM, path: "sprites/icon-ammo.png" },
   "icon.health": { suggestedSize: [32, 32], placeholderColor: COLOR_PINK, path: "sprites/icon-health.png" },
@@ -428,16 +418,17 @@ function generateFrames(slot: AssetSlot): HTMLCanvasElement[] | null {
 // ---------------------------------------------------------------------------
 // Real-image preloading. A small, curated subset of slots (the two wall
 // textures, the door, three enemy kinds' idle/hit frames, and the weapon's
-// hand/hit-splash overlays) can load an actual PNG from /public/sprites
-// instead of the procedural drawing above. Everything else — icons, the
-// weapon housing itself — stays procedural; this is an opt-in list, not a
-// blanket replacement. Loading is async and best-effort: a slot with no
-// successfully-loaded image just keeps using its procedural generator, so a
-// slow network or a missing file never blocks or breaks the game.
+// idle/fire frames) can load an actual PNG from /public/sprites instead of
+// the procedural drawing above. Everything else — icons — stays procedural;
+// this is an opt-in list, not a blanket replacement. Loading is async and
+// best-effort: a slot with no successfully-loaded image just keeps using its
+// procedural generator, so a slow network or a missing file never blocks or
+// breaks the game.
 // ---------------------------------------------------------------------------
 
 // Idle sets have two real frames (a hand-authored "bob"); hit sets have one.
-// Any slot not listed here falls back to its single ASSET_MANIFEST path.
+// weapon.fire has four real frames (the muzzle-flash animation). Any slot not
+// listed here falls back to its single ASSET_MANIFEST path.
 const REAL_SPRITE_FRAMES: Partial<Record<AssetSlot, string[]>> = {
   "enemy.grunt.idle": ["sprites/enemy-grunt-idle-0.png", "sprites/enemy-grunt-idle-1.png"],
   "enemy.grunt.hit": ["sprites/enemy-grunt-hit.png"],
@@ -445,10 +436,16 @@ const REAL_SPRITE_FRAMES: Partial<Record<AssetSlot, string[]>> = {
   "enemy.scout.hit": ["sprites/enemy-scout-hit.png"],
   "enemy.brute.idle": ["sprites/enemy-brute-idle-0.png", "sprites/enemy-brute-idle-1.png"],
   "enemy.brute.hit": ["sprites/enemy-brute-hit.png"],
+  "weapon.fire": [
+    "sprites/weapon-fire-0.png",
+    "sprites/weapon-fire-1.png",
+    "sprites/weapon-fire-2.png",
+    "sprites/weapon-fire-3.png",
+  ],
 };
 
-// Only these slots are ever fetched as real PNGs — everything else (icons,
-// the weapon housing) has no shipped file and stays procedural.
+// Only these slots are ever fetched as real PNGs — everything else (icons)
+// has no shipped file and stays procedural.
 const REAL_ASSET_SLOTS: AssetSlot[] = [
   "wall.a",
   "wall.b",
@@ -459,9 +456,8 @@ const REAL_ASSET_SLOTS: AssetSlot[] = [
   "enemy.scout.hit",
   "enemy.brute.idle",
   "enemy.brute.hit",
-  "weapon.handOpen",
-  "weapon.handFist",
-  "weapon.hitSplash",
+  "weapon.idle",
+  "weapon.fire",
 ];
 
 function realImagePaths(slot: AssetSlot): string[] {

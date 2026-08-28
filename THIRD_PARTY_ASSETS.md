@@ -34,14 +34,23 @@ Two files from this submission were used: `pixl-ppl.png` and
 | `enemy-brute-idle-0.png` | `arcade-shootemup-battle-robots.png`, column 1 (intact robot, head+body composited from one column crop) | Cropped, recolored to cream mid-tone, downscaled to ~27×72. |
 | `enemy-brute-idle-1.png` | Same sheet, column 2 (robot with a faint damage crack) | Same pipeline; used as the second idle frame instead of a synthetic bob, since the source art already provides a natural subtle-variation frame. |
 | `enemy-brute-hit.png` | Same sheet, column 3 (shattered/damaged robot) | Same pipeline, recolored with the mid-band forced to lavender (matching the hit-flash convention the procedural sprites already use). |
-| `weapon-hit-splash.png` | Same sheet, a small circular accessory/joint piece | Cropped, recolored to cream, used as a muzzle impact-spark decal layered over the (still procedural) weapon housing on fire. |
 
-**Source:** [Lo Fi First Person Hand](https://opengameart.org/content/lo-fi-first-person-hand)
-by **Ragnar Random**, OpenGameArt.org, CC0.
+FPS Weapons Overlay — knekko — CC0 — cropped from the second 64×64 row and recoloured pixel-by-pixel to the PIE HALL 98 palette.
+
+**Source:** [FPS Weapons Overlay](https://opengameart.org/content/fps-weapons-overlay)
+by **knekko**, OpenGameArt.org, CC0. Original file `fps_weapons.png`, 320×256,
+a 5x4 grid of strict 64×64 frames; the handgun is the second row (y=64..127).
 
 | File used | Source file / region | Modifications |
 |---|---|---|
-| `weapon-hand-open.png`, `weapon-hand-fist.png` | `lofifirstpersonhand.png`, open-hand and fist poses | Split into the two individual poses, outline recolored to the game's ink color (skin tone left as-is, not palette-quantized, since it's a small accent layered on the weapon rather than a main character). Used as an overlay so the weapon reads as gripped by a hand, without altering the disc-launcher housing itself. |
+| `weapon-idle.png` | `fps_weapons.png`, row 2, frame 1 (`x=0,y=64,64x64`) | Cropped to the exact 64×64 frame, no trim, no resize. Every non-transparent source color replaced 1:1 (no resampling) via an exact color dictionary built from that row's full palette, onto the project's fixed palette: darkest outline/grip → `#26364C`, gun body main → `#BCD8EA`, gun body highlight → `#9DE1E2`, cuff/decoration → `#B7A6E5`, hand → `#F1A36B`. |
+| `weapon-fire-0.png` .. `weapon-fire-3.png` | Same sheet, row 2, frames 2-5 (`x=64/128/192/256,y=64`, each `64x64`) | Same exact color-dictionary remap as the idle frame, applied identically across all four so the gun body/hand/silhouette never shift between frames; the muzzle flash's red/yellow source pixels map to `#F1A36B` (outer edge) and `#FFE7A1` (center). `fire-1` is the frame with the full flash burst. |
+
+**Source:** [Lo Fi First Person Hand](https://opengameart.org/content/lo-fi-first-person-hand)
+by **Ragnar Random**, OpenGameArt.org, CC0. No longer used — superseded by the
+knekko FPS Weapons Overlay above, which already includes a gripping hand in
+every frame, so the separate hand overlay was removed rather than layered on
+top of it.
 
 ## Audio — `public/audio/`
 

@@ -43,8 +43,15 @@ export const PICKUP_SCALE = 0.32;
 export const PROJECTILE_SCALE = 0.22;
 export const EXIT_SCALE = 1.0;
 
-export const WEAPON_DRAW_WIDTH = 44;
-export const WEAPON_DRAW_HEIGHT = 38;
+// Native 64x64 weapon frames drawn at a strict integer 2x — 128x128 — so
+// every source pixel maps to an even 2x2 block with no fractional scaling.
+export const WEAPON_DRAW_WIDTH = 128;
+export const WEAPON_DRAW_HEIGHT = 128;
+
+// How long the fire sprite (4 real frames) plays before falling back to
+// idle — matched to the disc-launcher's fire animation window, well inside
+// FIRE_COOLDOWN so the next shot's cooldown doesn't cut the animation short.
+export const WEAPON_FIRE_ANIM_DURATION = 0.14;
 
 export const DOOR_OPEN_RADIUS = 0.75;
 
