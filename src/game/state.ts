@@ -25,6 +25,26 @@ function makePickups(): Pickup[] {
     { kind: "ammo", pos: { x: 19, y: 2.5 }, amount: 12 },
     { kind: "health", pos: { x: 19, y: 12.5 }, amount: 25 },
     { kind: "ammo", pos: { x: 7, y: 16.5 }, amount: 12 },
+    // A small post-intro reward in the entrance hall — deliberately modest so
+    // Room A stays the safe tutorial room rather than a stockpile.
+    { kind: "ammo", pos: { x: 5, y: 5 }, amount: 8 },
+    // Room B (Locker Corridor): a resupply behind the first locker column, so
+    // clearing the close-range peek fight is what earns it.
+    { kind: "ammo", pos: { x: 20, y: 4 }, amount: 12 },
+    // A side-path alcove off the B->C ring corridor: off the direct route, a
+    // one-tile detour to claim it.
+    { kind: "ammo", pos: { x: 23, y: 9 }, amount: 12 },
+    // A health pack for the tail end of the Room B encounter.
+    { kind: "health", pos: { x: 23, y: 3 }, amount: 20 },
+    // Room D (Lab Classroom): a resupply near the lab-bench cover, rewarding
+    // the harder ranged-harassment fight.
+    { kind: "ammo", pos: { x: 4, y: 16 }, amount: 12 },
+    // A side-path alcove off the D->C ring corridor.
+    { kind: "health", pos: { x: 13, y: 12 }, amount: 20 },
+    // Room C (Activity Room, finale): pre-finale resupplies near its two
+    // cover pillars, ahead of the last mixed-kind encounter.
+    { kind: "ammo", pos: { x: 18, y: 14 }, amount: 12 },
+    { kind: "health", pos: { x: 24, y: 12 }, amount: 20 },
   ];
   return defs.map((d, i) => ({ id: i + 1, kind: d.kind, pos: d.pos, collected: false, amount: d.amount }));
 }
@@ -50,10 +70,21 @@ export function createInitialState(): GameState {
     // it" — no text needed, and several seconds of safety while they learn.
     spawnEnemy("grunt", { x: 6.5, y: 3.5 }, { speed: 0.05, fireInterval: 6 }),
     spawnEnemy("grunt", { x: 21, y: 3 }),
+    // A close-range "peeker" behind the first Room B locker column, so the
+    // room plays as a peek-and-cover fight rather than a straight walk-in.
+    spawnEnemy("grunt", { x: 18, y: 6 }),
     spawnEnemy("scout", { x: 23, y: 6 }),
     spawnEnemy("scout", { x: 4, y: 15 }),
     spawnEnemy("brute", { x: 7, y: 12 }),
+    // A far-side "harasser" across the Room D lab benches — with the new
+    // cover breaking sightlines, this one gets to shoot from range for a
+    // while before it can close the distance.
+    spawnEnemy("grunt", { x: 8, y: 17 }),
     spawnEnemy("brute", { x: 23, y: 12 }),
+    // Two flanking scouts converging on the finale from different sides of
+    // Room C's cover pillars, alongside the existing brute and grunt.
+    spawnEnemy("scout", { x: 18, y: 12 }),
+    spawnEnemy("scout", { x: 22, y: 17 }),
     spawnEnemy("grunt", { x: 19, y: 16 }),
   ];
 

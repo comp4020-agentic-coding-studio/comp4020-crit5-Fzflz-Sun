@@ -14,9 +14,9 @@ describe("createInitialState baseline", () => {
     expect(state.phase).toBe("playing");
   });
 
-  it("spawns exactly seven living enemies", () => {
+  it("spawns exactly eleven living enemies", () => {
     const state = createInitialState();
-    expect(state.enemies).toHaveLength(7);
+    expect(state.enemies).toHaveLength(11);
     expect(state.enemies.every((e) => e.alive)).toBe(true);
   });
 

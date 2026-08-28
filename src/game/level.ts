@@ -49,6 +49,39 @@ export function buildLevel(): LevelMap {
   cells[index(24, 1)] = 2;
   cells[index(24, 17)] = 2;
 
+  // Interior cover, one cluster per room, placed for tactical geometry
+  // (corners, broken sightlines, peekable pillars) rather than raw enemy
+  // stat buffs — difficulty comes from what's asked of the player's
+  // positioning, not from tougher numbers. Every block is kept clear of every
+  // doorway/corridor mouth and of the direct intro sightline down Room A, so
+  // none of it can soft-lock movement or break the tutorial's guaranteed
+  // first shot.
+  //
+  // Room B (Locker Corridor): two locker-like columns a couple of cells past
+  // the corridor mouth, so the room reads as a close-range peek-and-cover
+  // fight rather than an open box.
+  carve(cells, 19, 3, 1, 2); // locker column 1
+  carve(cells, 22, 5, 1, 2); // locker column 2
+
+  // Room D (Lab Classroom): two lab-bench columns off-center, breaking the
+  // long sightline from the entrance into a couple of duckable lanes — this
+  // is what makes the room's far-side enemy a ranged-harassment threat
+  // instead of a free hit the moment the door opens.
+  carve(cells, 2, 13, 1, 2); // bench 1
+  carve(cells, 6, 15, 1, 2); // bench 2
+
+  // Room C (Activity Room, holds the exit): two single-cell pillars near the
+  // exit, giving the finale's converging, mixed-kind encounter somewhere to
+  // break line of sight and fight from instead of an open killbox.
+  carve(cells, 19, 13, 1, 1); // finale pillar 1
+  carve(cells, 23, 15, 1, 1); // finale pillar 2
+
+  // Two small alcoves bumped off the open ring corridors — a one-tile detour
+  // off the direct route, each holding a pickup, so grabbing every resource
+  // means leaving the straight path rather than walking over all of it.
+  cells[index(23, 9)] = 0; // alcove off the B->C corridor
+  cells[index(13, 12)] = 0; // alcove off the D->C corridor
+
   const doors: Door[] = [
     { x: 10, y: 3, open: false },
     { x: 10, y: 4, open: false },

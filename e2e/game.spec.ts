@@ -17,7 +17,7 @@ test.describe("desktop", () => {
     await expect(canvas).toBeVisible();
     await expect(page.locator("#hud-health-value")).toHaveText("100");
     await expect(page.locator("#hud-ammo-value")).toHaveText("24");
-    await expect(page.locator("#hud-enemies-value")).toHaveText("7");
+    await expect(page.locator("#hud-enemies-value")).toHaveText("11");
 
     // No title/menu/tutorial screen: gameplay is live immediately, and the
     // page never scrolls.
@@ -30,7 +30,7 @@ test.describe("desktop", () => {
     await page.waitForTimeout(150);
     await page.keyboard.up("Space");
 
-    await expect(page.locator("#hud-enemies-value")).toHaveText("6");
+    await expect(page.locator("#hud-enemies-value")).toHaveText("10");
     await expect(page.locator("#hud-ammo-value")).toHaveText("23");
 
     expect(errors, `console/page errors during play: ${errors.join(" | ")}`).toHaveLength(0);
