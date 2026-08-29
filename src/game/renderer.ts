@@ -15,7 +15,6 @@ import {
   COLOR_INK,
   ENEMY_SCALE,
   EXIT_SCALE,
-  FIRE_COOLDOWN,
   FOV_RADIANS,
   HORIZON_RATIO,
   INTERNAL_HEIGHT,
@@ -25,6 +24,8 @@ import {
   PARTICLE_NEAR_CLIP,
   PEDESTAL_SCALE,
   PICKUP_SCALE,
+  PROJECTILE_MAX_SCREEN_PX,
+  PROJECTILE_NEAR_CLIP,
   PROJECTILE_SCALE,
   WALL_BRIGHTNESS_FLOOR,
   WEAPON_DRAW_HEIGHT,
@@ -159,20 +160,6 @@ function collectBillboards(state: GameState): Billboard[] {
     // Gentle blink so a pickup reads as interactive without any label.
     const blink = 0.7 + 0.3 * Math.sin(state.elapsed * 4 + pickup.id);
     billboards.push({ x: pickup.pos.x, y: pickup.pos.y, slot, frame: 0, fallbackColor: ASSET_MANIFEST[slot].placeholderColor, scale: PICKUP_SCALE, alpha: blink, anchor: "center" });
-  }
-
-  for (const projectile of state.projectiles as Projectile[]) {
-    const pulseFrame = Math.floor(state.elapsed * 6) % 2;
-    billboards.push({
-      x: projectile.pos.x,
-      y: projectile.pos.y,
-      slot: "projectile",
-      frame: pulseFrame,
-      fallbackColor: ASSET_MANIFEST.projectile.placeholderColor,
-      scale: PROJECTILE_SCALE,
-      alpha: 1,
-      anchor: "center",
-    });
   }
 
   const exitUnlocked = state.encounter.stage === "done";
@@ -314,17 +301,78 @@ function drawParticles(ctx: CanvasRenderingContext2D, state: GameState, dirX: nu
   ctx.globalAlpha = 1;
 }
 
-function drawWeapon(ctx: CanvasRenderingContext2D, state: GameState): void {
-  // FIRE_COOLDOWN counts player.fireCooldown down to 0 after each shot, so
-  // this is seconds elapsed since the shot that's still cooling down. The
-  // four real fire frames (already including the hand and muzzle flash) play
-  // across the first WEAPON_FIRE_ANIM_DURATION of that window, then it's back
-  // to idle for the remainder of the cooldown.
-  const elapsedSinceFire = FIRE_COOLDOWN - state.player.fireCooldown;
-  const firing = elapsedSinceFire >= 0 && elapsedSinceFire < WEAPON_FIRE_ANIM_DURATION;
-  const frame = firing ? Math.min(3, Math.floor((elapsedSinceFire / WEAPON_FIRE_ANIM_DURATION) * 4)) : 0;
-  const slot: AssetSlot = firing ? "weapon.fire" : "weapon.idle";
+/** Enemy projectiles used to be pushed into the same shared billboard array as
+ * enemies/pedestals/pickups and drawn through drawBillboards' per-column
+ * stripe loop — a projectile sprite that gets close to the camera fills a
+ * wide span of columns, each one its own drawImage call, so a firefight with
+ * several projectiles in flight could cost hundreds of draw calls a frame.
+ * This mirrors drawParticles instead: one drawImage (or fillRect fallback)
+ * per projectile, sampling the z-buffer at just a few points across its width
+ * rather than every column, and capped in on-screen size so a projectile
+ * right at the camera still can't balloon toward full-screen. */
+function drawProjectiles(ctx: CanvasRenderingContext2D, state: GameState, dirX: number, dirY: number, planeX: number, planeY: number, zBuffer: Float64Array): void {
+  const { player, projectiles } = state;
+  if (projectiles.length === 0) return;
 
+  const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+  const pulseFrame = Math.floor(state.elapsed * 6) % 2;
+  const image = getSpriteImage("projectile", pulseFrame);
+  ctx.globalAlpha = 1;
+
+  for (const projectile of projectiles as Projectile[]) {
+    const spriteX = projectile.pos.x - player.pos.x;
+    const spriteY = projectile.pos.y - player.pos.y;
+
+    const transformX = invDet * (dirY * spriteX - dirX * spriteY);
+    const transformY = invDet * (-planeY * spriteX + planeX * spriteY); // depth
+
+    if (!Number.isFinite(transformX) || !Number.isFinite(transformY) || transformY <= PROJECTILE_NEAR_CLIP) continue;
+
+    const screenX = Math.floor((INTERNAL_WIDTH / 2) * (1 + transformX / transformY));
+    const wallLineHeight = INTERNAL_HEIGHT / transformY;
+    const size = Math.min(PROJECTILE_MAX_SCREEN_PX, Math.max(1, Math.floor(wallLineHeight * PROJECTILE_SCALE)));
+    if (!Number.isFinite(size) || size <= 0) continue;
+
+    const half = size / 2;
+    if (screenX + half < 0 || screenX - half >= INTERNAL_WIDTH) continue;
+
+    // A handful of z-buffer samples across the sprite's width instead of one
+    // per covered column — enough to reject a projectile fully behind a wall
+    // without the full per-column occlusion precision drawBillboards uses.
+    const sampleXs = [screenX - half, screenX, screenX + half].map((sx) =>
+      Math.max(0, Math.min(INTERNAL_WIDTH - 1, Math.floor(sx))),
+    );
+    const visible = sampleXs.some((sx) => transformY < zBuffer[sx]!);
+    if (!visible) continue;
+
+    const screenY = Math.floor(HORIZON_Y - half);
+
+    if (image) {
+      ctx.drawImage(image, screenX - Math.floor(half), screenY, size, size);
+    } else {
+      ctx.fillStyle = ASSET_MANIFEST.projectile.placeholderColor;
+      ctx.fillRect(screenX - Math.floor(half), screenY, size, size);
+    }
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+/** Pure frame-selection math for the weapon sprite, split out from
+ * drawWeapon so it's directly unit-testable without a canvas. Derives
+ * idle/fire-0..3 purely from fireAnimationTimer — independent of
+ * fireCooldown (which Rapid shortens to a different value) and unaffected by
+ * hit-stop — so the four real fire frames always play the same way
+ * regardless of fire rate or a nearby kill. */
+export function computeWeaponFrame(fireAnimationTimer: number): { slot: AssetSlot; frame: number } {
+  if (fireAnimationTimer <= 0) return { slot: "weapon.idle", frame: 0 };
+  const elapsedSinceFire = WEAPON_FIRE_ANIM_DURATION - fireAnimationTimer;
+  const frame = Math.min(3, Math.floor((elapsedSinceFire / WEAPON_FIRE_ANIM_DURATION) * 4));
+  return { slot: "weapon.fire", frame };
+}
+
+function drawWeapon(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const { slot, frame } = computeWeaponFrame(state.player.fireAnimationTimer);
   const image = getSpriteImage(slot, frame);
   const w = WEAPON_DRAW_WIDTH;
   const h = WEAPON_DRAW_HEIGHT;
@@ -376,6 +424,7 @@ export function renderFrame(ctx: CanvasRenderingContext2D, state: GameState): vo
 
   drawWalls(ctx, state, dirX, dirY, planeX, planeY, zBuffer);
   drawBillboards(ctx, state, dirX, dirY, planeX, planeY, zBuffer);
+  drawProjectiles(ctx, state, dirX, dirY, planeX, planeY, zBuffer);
   drawParticles(ctx, state, dirX, dirY, planeX, planeY, zBuffer);
   drawWeapon(ctx, state);
 }

@@ -101,9 +101,12 @@ export const SPAWN_TELEGRAPH_DURATION = 0.5;
 export const WAVE_PAUSE_DURATION = 1.2;
 export const BRUTE_TELEGRAPH_DURATION = 0.6;
 
-// Kill feedback.
-export const HITSTOP_KILL_NORMAL = 0.045;
-export const HITSTOP_KILL_BRUTE = 0.06;
+// Kill feedback. Hit-stop only freezes the enemy/world side of the sim (see
+// state.ts's update()) — player input, movement, fire cooldown, the weapon
+// animation and elapsed time keep running every frame — so these are tuned as
+// a brief punch on the enemies around a kill, not a pause the player feels.
+export const HITSTOP_KILL_NORMAL = 0.018;
+export const HITSTOP_KILL_BRUTE = 0.028;
 export const HIT_PARTICLE_COUNT = 3;
 export const KILL_PARTICLE_MULTIPLIER = 1.6;
 export const BRUTE_KILL_PARTICLE_MULTIPLIER = 2.2;
@@ -170,13 +173,33 @@ export const SPAWN_FALLBACK_OFFSETS: ReadonlyArray<{ x: number; y: number }> = [
 ];
 export const SPAWN_RETRY_DELAY = 0.3;
 
-// Audio: a fixed-size, round-robin voice pool per sound name replaces one
-// `new Audio()` per playSound() call, and playerHurt additionally has its own
-// global minimum replay interval so a burst of near-simultaneous damage
-// events (contact and a projectile in the same instant, say) still can't
-// spam the ear or the allocator.
+// Audio. Playback is Web Audio API by default (see audio.ts): one shared
+// AudioContext, each sound file fetched+decoded to an AudioBuffer exactly
+// once, and every play() is a short-lived AudioBufferSourceNode — never a
+// re-seek of something already playing. AUDIO_VOICE_POOL_SIZE and
+// PLAYER_HURT_MIN_REPLAY_INTERVAL remain in use by the constrained HTMLAudio
+// fallback path used only when Web Audio itself is unavailable.
 export const AUDIO_VOICE_POOL_SIZE = 4;
 export const PLAYER_HURT_MIN_REPLAY_INTERVAL = 0.2;
+
+// fire.ogg runs ~1.3s — far longer than the fire interval (0.28s, 0.21s under
+// Rapid) — so sustained fire is trimmed to just its punchy onset instead of
+// playing full-length overlapping tails. AUDIO_FIRE_FADE_DURATION ramps the
+// gain to 0 just before the clip's end to avoid an audible click from a hard
+// cut.
+export const AUDIO_FIRE_CLIP_DURATION = 0.15;
+export const AUDIO_FIRE_FADE_DURATION = 0.03;
+
+// Caps on concurrently-playing Web Audio sources — global across all sounds,
+// and per sound name — so a burst (or a test driving hundreds of events in a
+// tight loop) can only ever grow node count up to a bound, never without one.
+export const AUDIO_MAX_ACTIVE_SOURCES_GLOBAL = 16;
+export const AUDIO_MAX_ACTIVE_SOURCES_PER_SOUND = 6;
+
+// At most this many distinct sound *names* actually play in a single frame;
+// see audio.ts's playEventSounds for the per-frame dedup/priority queue this
+// bounds (same name collapses to one play regardless of budget).
+export const AUDIO_MAX_EVENTS_PER_FRAME = 4;
 
 // Particle rendering/perf caps. Particles use a cheap single-fillRect draw
 // path (see renderer.ts's drawParticles), capped in on-screen size so a
@@ -186,3 +209,11 @@ export const PLAYER_HURT_MIN_REPLAY_INTERVAL = 0.2;
 export const MAX_ACTIVE_PARTICLES = 140;
 export const PARTICLE_MAX_SCREEN_PX = 10;
 export const PARTICLE_NEAR_CLIP = 0.08;
+
+// Enemy projectiles draw through their own cheap path (see renderer.ts's
+// drawProjectiles) instead of the shared per-screen-column billboard loop:
+// one drawImage/fillRect per projectile, sampling only a few z-buffer columns
+// instead of every column the sprite would cover. Capped in on-screen size
+// for the same "close to camera" reason as particles.
+export const PROJECTILE_MAX_SCREEN_PX = 40;
+export const PROJECTILE_NEAR_CLIP = 0.08;

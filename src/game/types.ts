@@ -12,6 +12,11 @@ export interface Player {
   maxHealth: number;
   ammo: number;
   fireCooldown: number;
+  // Independent of fireCooldown so the weapon-fire animation can keep
+  // running (and always start from frame 0 on a real shot) even while
+  // fireCooldown is a different length under an upgrade, and even during a
+  // world hit-stop that must not visibly pause the player's own weapon.
+  fireAnimationTimer: number;
 }
 
 export type EnemyKind = "grunt" | "scout" | "brute";

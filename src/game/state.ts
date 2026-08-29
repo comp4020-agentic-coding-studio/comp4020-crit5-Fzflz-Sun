@@ -49,6 +49,7 @@ export function createInitialState(): GameState {
     maxHealth: STARTING_HEALTH,
     ammo: STARTING_AMMO,
     fireCooldown: 0,
+    fireAnimationTimer: 0,
   };
 
   const enemies = [
@@ -152,6 +153,9 @@ function updatePlayerMotion(state: GameState, input: InputState, dt: number): vo
   }
 
   player.fireCooldown = Math.max(0, player.fireCooldown - dt);
+  // Decrements every frame regardless of hit-stop — the player's own weapon
+  // animation must never visibly pause while a kill's world-freeze is active.
+  player.fireAnimationTimer = Math.max(0, player.fireAnimationTimer - dt);
 }
 
 function updatePickups(state: GameState): void {
@@ -188,18 +192,15 @@ export function update(state: GameState, input: InputState, dt: number): GameSta
     return input.restart ? createInitialState() : state;
   }
 
-  // A kill briefly freezes the whole simulation (not input) for a punchy
-  // "hit-stop" beat. The duration is a couple of frames at most, so simply
-  // skipping this frame's simulation is imperceptible against a multi-minute
-  // playthrough and never drops a held input — it's just read next frame.
-  if (state.hitStopTimer > 0) {
-    state.hitStopTimer = Math.max(0, state.hitStopTimer - dt);
-    return state;
-  }
-
   const healthBefore = state.player.health;
   const hurtEventBefore = state.hurtEventId;
 
+  // A kill briefly freezes only the enemy/world side of the sim for a punchy
+  // "hit-stop" beat — enemy movement/AI, enemy projectiles, and world
+  // particles pause for a frame or two. Everything the player directly feels
+  // (input, movement/turning, fire cooldown, the weapon-fire animation,
+  // elapsed time, HUD/audio, restart) keeps running every frame below, so
+  // holding a key through a kill never reads as a stutter.
   state.elapsed += dt;
   updatePlayerMotion(state, input, dt);
   updateDoors(state.map, state.player.pos, DOOR_OPEN_RADIUS);
@@ -207,10 +208,14 @@ export function update(state: GameState, input: InputState, dt: number): GameSta
   const renderAngle = quantizeAngle(state.player.angle);
   if (input.fire) handlePlayerFire(state, renderAngle);
 
-  updateEnemies(state, dt, BRUTE_TELEGRAPH_DURATION);
-  resolveEntitySeparation(state);
-  updateProjectiles(state, dt);
-  updateParticles(state, dt);
+  if (state.hitStopTimer > 0) {
+    state.hitStopTimer = Math.max(0, state.hitStopTimer - dt);
+  } else {
+    updateEnemies(state, dt, BRUTE_TELEGRAPH_DURATION);
+    resolveEntitySeparation(state);
+    updateProjectiles(state, dt);
+    updateParticles(state, dt);
+  }
   updatePickups(state);
   updateEncounter(state, dt);
   updatePedestals(state);

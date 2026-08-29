@@ -42,6 +42,7 @@ import {
   SCORE_BRUTE,
   SCORE_GRUNT,
   SCORE_SCOUT,
+  WEAPON_FIRE_ANIM_DURATION,
 } from "./constants";
 
 function normalizeAngle(angle: number): number {
@@ -206,7 +207,6 @@ export function applyHitscanDamage(state: GameState, enemy: Enemy, amount: numbe
   const impact = state.upgrades.impact;
   const dmg = amount * (impact ? IMPACT_DAMAGE_MULTIPLIER : 1);
   enemy.health -= dmg;
-  enemy.flashTimer = HIT_FLASH_DURATION;
 
   const dx = enemy.pos.x - state.player.pos.x;
   const dy = enemy.pos.y - state.player.pos.y;
@@ -219,6 +219,13 @@ export function applyHitscanDamage(state: GameState, enemy: Enemy, amount: numbe
     enemy.state = "dead";
     killEnemy(state, enemy);
   } else {
+    // Dead enemies are skipped entirely by collectBillboards, so flashTimer
+    // has no visual effect on a lethal hit — only set it here, on the
+    // non-lethal branch. This also means playEventSounds' "flash just
+    // started" transition never fires for an enemy that died on this same
+    // hit, so a kill plays exactly one enemyDeath cue, not enemyDeath +
+    // enemyHit together.
+    enemy.flashTimer = HIT_FLASH_DURATION;
     spawnHitSpark(state, enemy.pos);
   }
 }
@@ -243,6 +250,10 @@ export function handlePlayerFire(state: GameState, renderAngle: number): void {
 
   player.fireCooldown = FIRE_COOLDOWN * (state.upgrades.rapid ? RAPID_COOLDOWN_MULTIPLIER : 1);
   player.ammo -= 1;
+  // Independent of fireCooldown (which Rapid shortens) so both weapons'
+  // animations always start from the same frame 0 — and only on an actual
+  // shot that consumed ammo, never a no-op fire-held-with-no-ammo frame.
+  player.fireAnimationTimer = WEAPON_FIRE_ANIM_DURATION;
 
   const destroyed = resolveProjectileHitscan(
     state.map,

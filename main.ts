@@ -13,16 +13,19 @@ import { INTERNAL_HEIGHT, INTERNAL_WIDTH, MAX_DT } from "./src/game/constants";
 // ever waits on them, so the instant-start requirement is unaffected.
 void preloadRealSprites();
 
-// Browser autoplay policy blocks sound until a real user gesture; the first
-// keydown or touchstart (keyboard or touch controls, either counts) unlocks
-// every subsequent playSound() call for the rest of the session.
+// Browser autoplay policy blocks sound (and suspends any AudioContext) until
+// a real user gesture; the first keydown, touchstart, or pointerdown
+// (keyboard, touch, or mouse click-to-fire, any of them counts) unlocks/
+// resumes audio for the rest of the session.
 function unlockAudioOnce(): void {
   unlockAudio();
   window.removeEventListener("keydown", unlockAudioOnce);
   window.removeEventListener("touchstart", unlockAudioOnce);
+  window.removeEventListener("pointerdown", unlockAudioOnce);
 }
 window.addEventListener("keydown", unlockAudioOnce);
 window.addEventListener("touchstart", unlockAudioOnce);
+window.addEventListener("pointerdown", unlockAudioOnce);
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas")!;
 const ctx = canvas.getContext("2d")!;
