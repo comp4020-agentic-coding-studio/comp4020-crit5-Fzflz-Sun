@@ -7,12 +7,17 @@
 // asks this module for a slot, never draws a hardcoded shape itself, so
 // swapping a slot's source is a manifest edit, not a rendering-code edit.
 import { COLOR_CREAM, COLOR_CYAN, COLOR_FLOOR, COLOR_ICE, COLOR_INK, COLOR_LAVENDER, COLOR_PEACH, COLOR_PINK } from "./constants";
-import type { EnemyKind } from "./types";
+import type { EnemyKind, UpgradeKind } from "./types";
 
 export type AssetSlot =
   | "wall.a"
   | "wall.b"
   | "door"
+  | "barrier"
+  | "pedestal.rapid"
+  | "pedestal.impact"
+  | "pedestal.pierce"
+  | "pedestal.salvage"
   | "enemy.grunt.idle"
   | "enemy.grunt.hit"
   | "enemy.grunt.death"
@@ -46,6 +51,11 @@ export const ASSET_MANIFEST: Record<AssetSlot, AssetManifestEntry> = {
   "wall.a": { suggestedSize: [64, 64], placeholderColor: COLOR_ICE, path: "sprites/wall-a.png" },
   "wall.b": { suggestedSize: [64, 64], placeholderColor: COLOR_LAVENDER, path: "sprites/wall-b.png" },
   door: { suggestedSize: [64, 64], placeholderColor: COLOR_PEACH, path: "sprites/door.png" },
+  barrier: { suggestedSize: [64, 64], placeholderColor: COLOR_CYAN, path: "sprites/barrier.png" },
+  "pedestal.rapid": { suggestedSize: [32, 48], placeholderColor: COLOR_CYAN, path: "sprites/pedestal-rapid.png" },
+  "pedestal.impact": { suggestedSize: [32, 48], placeholderColor: COLOR_PEACH, path: "sprites/pedestal-impact.png" },
+  "pedestal.pierce": { suggestedSize: [32, 48], placeholderColor: COLOR_LAVENDER, path: "sprites/pedestal-pierce.png" },
+  "pedestal.salvage": { suggestedSize: [32, 48], placeholderColor: COLOR_CREAM, path: "sprites/pedestal-salvage.png" },
   "enemy.grunt.idle": { suggestedSize: [48, 64], placeholderColor: COLOR_CYAN, path: "sprites/grunt-idle.png" },
   "enemy.grunt.hit": { suggestedSize: [48, 64], placeholderColor: COLOR_LAVENDER, path: "sprites/grunt-hit.png" },
   "enemy.grunt.death": { suggestedSize: [48, 64], placeholderColor: COLOR_FLOOR, path: "sprites/grunt-death.png" },
@@ -208,6 +218,63 @@ function genDoorTexture(): HTMLCanvasElement {
   ctx.fillRect(30, 42, 4, 10);
   ctx.lineWidth = 4;
   ctx.strokeRect(2, 2, size - 4, size - 4);
+  return canvas;
+}
+
+// ---------------------------------------------------------------------------
+// Barrier gate — a pulsing energy fence sealing Room B's exit shut during its
+// encounter. Two frames (dim / bright cross-hatch) the renderer alternates
+// between so it visibly hums rather than sitting as a flat colored wall.
+// ---------------------------------------------------------------------------
+
+function genBarrierFrame(bright: boolean): HTMLCanvasElement {
+  const size = 64;
+  const canvas = makeCanvas(size, size);
+  const ctx = ctx2d(canvas);
+  ctx.fillStyle = COLOR_INK;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalAlpha = bright ? 0.85 : 0.55;
+  ctx.fillStyle = COLOR_CYAN;
+  for (let y = 0; y < size; y += 8) {
+    ctx.fillRect(0, y, size, 4);
+  }
+  ctx.globalAlpha = bright ? 0.9 : 0.5;
+  ctx.strokeStyle = COLOR_ICE;
+  ctx.lineWidth = bright ? 3 : 1.5;
+  for (let x = 8; x < size; x += 16) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, size);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = COLOR_INK;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, size - 4, size - 4);
+  return canvas;
+}
+
+// ---------------------------------------------------------------------------
+// Upgrade pedestals — a floor-anchored base with a color-coded floating orb,
+// one color per upgrade so the two choices in a pair read as distinct from
+// across the room, no label needed until the player is close (see the HUD
+// hint banner for the text).
+// ---------------------------------------------------------------------------
+
+const PEDESTAL_ORB_COLOR: Record<UpgradeKind, string> = {
+  rapid: COLOR_CYAN,
+  impact: COLOR_PEACH,
+  pierce: COLOR_LAVENDER,
+  salvage: COLOR_CREAM,
+};
+
+function genPedestalSprite(kind: UpgradeKind): HTMLCanvasElement {
+  const unit = 2;
+  const canvas = makeCanvas(32, 48);
+  const ctx = ctx2d(canvas);
+  blockyRect(ctx, unit, 5, 18, 6, 5, COLOR_FLOOR, COLOR_INK);
+  blockyRect(ctx, unit, 6, 14, 4, 4, COLOR_ICE, COLOR_INK);
+  blockyEllipse(ctx, unit, 8, 8, 4.5, 4.5, PEDESTAL_ORB_COLOR[kind], COLOR_INK);
   return canvas;
 }
 
@@ -383,6 +450,16 @@ function generateFrames(slot: AssetSlot): HTMLCanvasElement[] | null {
       return [genPegboardTexture()];
     case "door":
       return [genDoorTexture()];
+    case "barrier":
+      return [genBarrierFrame(false), genBarrierFrame(true)];
+    case "pedestal.rapid":
+      return [genPedestalSprite("rapid")];
+    case "pedestal.impact":
+      return [genPedestalSprite("impact")];
+    case "pedestal.pierce":
+      return [genPedestalSprite("pierce")];
+    case "pedestal.salvage":
+      return [genPedestalSprite("salvage")];
     case "enemy.grunt.idle":
       return getEnemySprites().grunt.idle;
     case "enemy.grunt.hit":
@@ -460,8 +537,25 @@ const REAL_ASSET_SLOTS: AssetSlot[] = [
   "weapon.fire",
 ];
 
+// Slots with no multi-frame entry in REAL_SPRITE_FRAMES fall back to a
+// single-element array wrapping their one manifest path. That fallback array
+// is memoized per slot (built once, reused forever) rather than allocated
+// fresh on every call — getSpriteImage calls this from the ~320-column wall
+// loop every single frame, so an unmemoized version meant hundreds of
+// throwaway one-element arrays created and GC'd per frame for every wall/door
+// slot that has no real art.
+const fallbackImagePaths = new Map<AssetSlot, string[]>();
+
 function realImagePaths(slot: AssetSlot): string[] {
-  return REAL_SPRITE_FRAMES[slot] ?? [ASSET_MANIFEST[slot].path];
+  const real = REAL_SPRITE_FRAMES[slot];
+  if (real) return real;
+
+  let fallback = fallbackImagePaths.get(slot);
+  if (!fallback) {
+    fallback = [ASSET_MANIFEST[slot].path];
+    fallbackImagePaths.set(slot, fallback);
+  }
+  return fallback;
 }
 
 const realImages = new Map<string, HTMLImageElement>();

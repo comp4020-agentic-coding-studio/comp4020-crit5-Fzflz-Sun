@@ -9,7 +9,7 @@
     <title>PIE HALL 98</title>
     <meta
       name="description"
-      content="A short browser school-hall shooter rendered with a 2D raycasting engine — clear the mascots and robots, then find the exit."
+      content="A short browser school-hall shooter rendered with a 2D raycasting engine — fight through waves, pick two upgrades, and clear the exit in under five minutes."
     />
 
     <meta property="og:type" content="website" />
@@ -38,13 +38,25 @@
           </div>
           <div class="hud-item">
             <svg viewBox="0 0 24 24" class="hud-icon"><ellipse cx="12" cy="12" rx="9" ry="9" fill="currentColor"/><ellipse cx="12" cy="12" rx="9" ry="3.5" fill="none" stroke="#fff" stroke-opacity="0.55" stroke-width="1.5"/></svg>
-            <span id="hud-ammo-value">24</span>
+            <span id="hud-ammo-value">16</span>
           </div>
           <div class="hud-item">
             <svg viewBox="0 0 24 24" class="hud-icon"><circle cx="12" cy="8" r="4" fill="currentColor"/><path fill="currentColor" d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z"/></svg>
-            <span id="hud-enemies-value">7</span>
+            <span id="hud-enemies-value">1</span>
+          </div>
+          <div class="hud-item">
+            <svg viewBox="0 0 24 24" class="hud-icon"><path fill="currentColor" d="M12 2l2.4 7.2H22l-6 4.4 2.3 7.2L12 16.4 5.7 20.8 8 13.6 2 9.2h7.6z"/></svg>
+            <span id="hud-score-value">0</span>
+          </div>
+          <div class="hud-item">
+            <span id="hud-multiplier-value">x1</span>
+          </div>
+          <div class="hud-item">
+            <span id="hud-timer-value">0:00</span>
           </div>
         </div>
+
+        <div id="hint-banner" aria-hidden="true" hidden></div>
       </div>
 
       <div id="touch-controls" aria-hidden="true">
@@ -68,11 +80,22 @@
       </div>
 
       <div id="end-overlay" hidden>
-        <button id="btn-retry" class="retry-btn" type="button">
-          <svg viewBox="0 0 24 24">
-            <path fill="currentColor" d="M12 4V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/>
-          </svg>
-        </button>
+        <div id="end-panel">
+          <h2 id="end-title">Cleared!</h2>
+          <dl id="end-stats">
+            <div><dt>Time</dt><dd id="end-time-value">0:00</dd></div>
+            <div><dt>Score</dt><dd id="end-score-value">0</dd></div>
+            <div><dt>Kills</dt><dd id="end-kills-value">0</dd></div>
+            <div><dt>Best combo</dt><dd id="end-combo-value">x1</dd></div>
+            <div><dt>Upgrades</dt><dd id="end-upgrades-value">None</dd></div>
+            <div><dt>Grade</dt><dd id="end-grade-value">-</dd></div>
+          </dl>
+          <button id="btn-retry" class="retry-btn" type="button">
+            <svg viewBox="0 0 24 24">
+              <path fill="currentColor" d="M12 4V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </main>
 

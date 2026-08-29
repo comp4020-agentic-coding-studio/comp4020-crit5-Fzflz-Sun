@@ -3,12 +3,15 @@
 // rules live here and in the modules it calls, never in the renderer.
 import type { GameState, InputState, Pickup } from "./types";
 import { buildLevel, isSolid, moveWithCollision, updateDoors } from "./level";
-import { spawnEnemy, updateEnemies } from "./enemies";
-import { handlePlayerFire } from "./combat";
+import { resolveEntitySeparation, spawnEnemy, updateEnemies } from "./enemies";
+import { applyPlayerDamage, handlePlayerFire } from "./combat";
+import { updateEncounter, updatePedestals } from "./encounters";
 import { quantizeAngle } from "./angle";
 import {
+  BRUTE_TELEGRAPH_DURATION,
   DOOR_OPEN_RADIUS,
   EXIT_RADIUS,
+  MAX_ACTIVE_PARTICLES,
   PICKUP_RADIUS,
   PLAYER_MOVE_SPEED,
   PLAYER_MOVE_SPEED_BACK,
@@ -19,39 +22,23 @@ import {
   STARTING_HEALTH,
 } from "./constants";
 
+/** Just three fixed pickups left on the map, all tucked into the two
+ * non-combat rooms (the start room and Room D's dead-end detour) — sustain
+ * during actual fights now comes from kill drops (see combat.ts), so a fixed
+ * map pickup is a small bonus for exploring rather than the main supply. */
 function makePickups(): Pickup[] {
   const defs: Array<{ kind: Pickup["kind"]; pos: { x: number; y: number }; amount: number }> = [
+    { kind: "ammo", pos: { x: 5, y: 5 }, amount: 6 },
     { kind: "health", pos: { x: 3, y: 13.5 }, amount: 25 },
-    { kind: "ammo", pos: { x: 19, y: 2.5 }, amount: 12 },
-    { kind: "health", pos: { x: 19, y: 12.5 }, amount: 25 },
-    { kind: "ammo", pos: { x: 7, y: 16.5 }, amount: 12 },
-    // A small post-intro reward in the entrance hall — deliberately modest so
-    // Room A stays the safe tutorial room rather than a stockpile.
-    { kind: "ammo", pos: { x: 5, y: 5 }, amount: 8 },
-    // Room B (Locker Corridor): a resupply behind the first locker column, so
-    // clearing the close-range peek fight is what earns it.
-    { kind: "ammo", pos: { x: 20, y: 4 }, amount: 12 },
-    // A side-path alcove off the B->C ring corridor: off the direct route, a
-    // one-tile detour to claim it.
-    { kind: "ammo", pos: { x: 23, y: 9 }, amount: 12 },
-    // A health pack for the tail end of the Room B encounter.
-    { kind: "health", pos: { x: 23, y: 3 }, amount: 20 },
-    // Room D (Lab Classroom): a resupply near the lab-bench cover, rewarding
-    // the harder ranged-harassment fight.
-    { kind: "ammo", pos: { x: 4, y: 16 }, amount: 12 },
-    // A side-path alcove off the D->C ring corridor.
-    { kind: "health", pos: { x: 13, y: 12 }, amount: 20 },
-    // Room C (Activity Room, finale): pre-finale resupplies near its two
-    // cover pillars, ahead of the last mixed-kind encounter.
-    { kind: "ammo", pos: { x: 18, y: 14 }, amount: 12 },
-    { kind: "health", pos: { x: 24, y: 12 }, amount: 20 },
+    { kind: "ammo", pos: { x: 4, y: 16 }, amount: 10 },
   ];
   return defs.map((d, i) => ({ id: i + 1, kind: d.kind, pos: d.pos, collected: false, amount: d.amount }));
 }
 
-/** Builds a brand-new game: fresh level, fresh player, fresh enemies. Called
- * on first load and again on every restart, so nothing from a previous run
- * (a dead enemy, a spent pickup, an open door) ever carries over. */
+/** Builds a brand-new game: fresh level, fresh player, one tutorial enemy,
+ * and a freshly-reset encounter/score/upgrade state. Called on first load
+ * and again on every restart, so nothing from a previous run ever carries
+ * over. */
 export function createInitialState(): GameState {
   const map = buildLevel();
 
@@ -65,27 +52,10 @@ export function createInitialState(): GameState {
   };
 
   const enemies = [
-    // The one right ahead of the start position: barely moving and slow to
-    // fire, so the very first move a stranger makes is "walk up and shoot
-    // it" — no text needed, and several seconds of safety while they learn.
-    spawnEnemy("grunt", { x: 6.5, y: 3.5 }, { speed: 0.05, fireInterval: 6 }),
-    spawnEnemy("grunt", { x: 21, y: 3 }),
-    // A close-range "peeker" behind the first Room B locker column, so the
-    // room plays as a peek-and-cover fight rather than a straight walk-in.
-    spawnEnemy("grunt", { x: 18, y: 6 }),
-    spawnEnemy("scout", { x: 23, y: 6 }),
-    spawnEnemy("scout", { x: 4, y: 15 }),
-    spawnEnemy("brute", { x: 7, y: 12 }),
-    // A far-side "harasser" across the Room D lab benches — with the new
-    // cover breaking sightlines, this one gets to shoot from range for a
-    // while before it can close the distance.
-    spawnEnemy("grunt", { x: 8, y: 17 }),
-    spawnEnemy("brute", { x: 23, y: 12 }),
-    // Two flanking scouts converging on the finale from different sides of
-    // Room C's cover pillars, alongside the existing brute and grunt.
-    spawnEnemy("scout", { x: 18, y: 12 }),
-    spawnEnemy("scout", { x: 22, y: 17 }),
-    spawnEnemy("grunt", { x: 19, y: 16 }),
+    // The one right ahead of the start position: barely moving and with no
+    // ranged attack at all (grunts never have one), so the very first move a
+    // stranger makes is "walk up and shoot it" — no text needed.
+    spawnEnemy("grunt", { x: 6.5, y: 3.5 }, { speed: 0.05 }),
   ];
 
   return {
@@ -95,13 +65,42 @@ export function createInitialState(): GameState {
     projectiles: [],
     pickups: makePickups(),
     particles: [],
+    pedestals: [],
     phase: "playing",
     elapsed: 0,
     nextId: 1000,
+
+    encounter: {
+      stage: "tutorial",
+      waveIndex: 0,
+      waveQueue: [],
+      pending: [],
+      pauseTimer: 0,
+    },
+
+    score: 0,
+    multiplier: 1,
+    bestMultiplier: 1,
+    comboKills: 0,
+    killCount: 0,
+    damageTaken: 0,
+
+    hitStopTimer: 0,
+
+    hurtEventId: 0,
+
+    hintShown: false,
+    hintTimer: 0,
+    projectilesDestroyed: 0,
+
+    upgrades: { rapid: false, impact: false, pierce: false, salvage: false },
+    upgradeChoice1: null,
+    upgradeChoice2: null,
   };
 }
 
 function updateProjectiles(state: GameState, dt: number): void {
+  if (state.projectiles.length === 0) return;
   const survivors = [];
   for (const p of state.projectiles) {
     p.pos.x += p.vel.x * dt;
@@ -113,7 +112,7 @@ function updateProjectiles(state: GameState, dt: number): void {
     const dx = state.player.pos.x - p.pos.x;
     const dy = state.player.pos.y - p.pos.y;
     if (Math.hypot(dx, dy) <= PROJECTILE_RADIUS + PLAYER_RADIUS) {
-      state.player.health = Math.max(0, state.player.health - p.damage);
+      applyPlayerDamage(state, p.damage);
       continue;
     }
 
@@ -123,6 +122,7 @@ function updateProjectiles(state: GameState, dt: number): void {
 }
 
 function updateParticles(state: GameState, dt: number): void {
+  if (state.particles.length === 0) return;
   const survivors = [];
   for (const particle of state.particles) {
     particle.pos.x += particle.vel.x * dt;
@@ -130,7 +130,11 @@ function updateParticles(state: GameState, dt: number): void {
     particle.ttl -= dt;
     if (particle.ttl > 0) survivors.push(particle);
   }
-  state.particles = survivors;
+  // Global cap: a burst of near-simultaneous deaths (several Brutes at once)
+  // must not grow this array without bound. Keep the newest, since those are
+  // whatever just happened and are what the player's eye is on.
+  state.particles =
+    survivors.length > MAX_ACTIVE_PARTICLES ? survivors.slice(survivors.length - MAX_ACTIVE_PARTICLES) : survivors;
 }
 
 function updatePlayerMotion(state: GameState, input: InputState, dt: number): void {
@@ -169,8 +173,7 @@ function checkEndConditions(state: GameState): void {
     return;
   }
 
-  const allDead = state.enemies.every((e) => !e.alive);
-  if (!allDead) return;
+  if (state.encounter.stage !== "done") return;
 
   const exitCenter = { x: state.map.exit.x + 0.5, y: state.map.exit.y + 0.5 };
   const dx = state.player.pos.x - exitCenter.x;
@@ -185,6 +188,18 @@ export function update(state: GameState, input: InputState, dt: number): GameSta
     return input.restart ? createInitialState() : state;
   }
 
+  // A kill briefly freezes the whole simulation (not input) for a punchy
+  // "hit-stop" beat. The duration is a couple of frames at most, so simply
+  // skipping this frame's simulation is imperceptible against a multi-minute
+  // playthrough and never drops a held input — it's just read next frame.
+  if (state.hitStopTimer > 0) {
+    state.hitStopTimer = Math.max(0, state.hitStopTimer - dt);
+    return state;
+  }
+
+  const healthBefore = state.player.health;
+  const hurtEventBefore = state.hurtEventId;
+
   state.elapsed += dt;
   updatePlayerMotion(state, input, dt);
   updateDoors(state.map, state.player.pos, DOOR_OPEN_RADIUS);
@@ -192,10 +207,25 @@ export function update(state: GameState, input: InputState, dt: number): GameSta
   const renderAngle = quantizeAngle(state.player.angle);
   if (input.fire) handlePlayerFire(state, renderAngle);
 
-  updateEnemies(state, dt);
+  updateEnemies(state, dt, BRUTE_TELEGRAPH_DURATION);
+  resolveEntitySeparation(state);
   updateProjectiles(state, dt);
   updateParticles(state, dt);
   updatePickups(state);
+  updateEncounter(state, dt);
+  updatePedestals(state);
+
+  if (state.hintTimer > 0) state.hintTimer = Math.max(0, state.hintTimer - dt);
+
+  // Driven by the explicit damage-event counter, not by comparing health
+  // across frames — a snapshot diff can't be throttled independently and
+  // conflates "took real damage" with any other reason health might move.
+  if (state.hurtEventId !== hurtEventBefore) {
+    state.damageTaken += healthBefore - state.player.health;
+    state.comboKills = 0;
+    state.multiplier = 1;
+  }
+
   checkEndConditions(state);
 
   return state;

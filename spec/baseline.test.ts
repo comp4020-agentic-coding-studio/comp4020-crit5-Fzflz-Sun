@@ -1,7 +1,9 @@
 // Sensor: the numbers a cold-start player is promised (full health, a full
-// magazine, a fixed enemy count) and the guarantee that the very first enemy
-// is a safe, aimed freebie. These are cheap to silently drift as the level or
-// enemy defs change, and nothing else catches that drift — this does.
+// magazine, a lone tutorial enemy) and the guarantee that the very first
+// enemy is a safe, aimed freebie. The rest of the run's enemies arrive later
+// via the room-encounter waves in encounters.ts, not at spawn — these checks
+// are cheap to silently drift as the level or enemy defs change, and nothing
+// else catches that drift — this does.
 import { describe, expect, it } from "vitest";
 import { createInitialState } from "../src/game/state";
 import { STARTING_AMMO, STARTING_HEALTH } from "../src/game/constants";
@@ -14,9 +16,9 @@ describe("createInitialState baseline", () => {
     expect(state.phase).toBe("playing");
   });
 
-  it("spawns exactly eleven living enemies", () => {
+  it("spawns exactly one living (tutorial) enemy at start", () => {
     const state = createInitialState();
-    expect(state.enemies).toHaveLength(11);
+    expect(state.enemies).toHaveLength(1);
     expect(state.enemies.every((e) => e.alive)).toBe(true);
   });
 

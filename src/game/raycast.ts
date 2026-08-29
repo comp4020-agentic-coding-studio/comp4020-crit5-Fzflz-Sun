@@ -12,10 +12,15 @@ export interface RayHit {
   distance: number;
   /** 0 = hit a north/south-facing wall face, 1 = east/west-facing. */
   side: 0 | 1;
-  /** Wall variant hit, 3 for a closed door, -1 if nothing was hit. */
+  /** Wall variant hit, 3 for a closed door, 4 for a closed barrier gate, -1
+   * if nothing was hit. */
   cell: number;
   /** 0..1 position along the hit wall face, for texture placement. */
   wallX: number;
+  /** Grid cell the hit landed in, -1 if nothing was hit — lets the renderer
+   * look the door back up (e.g. to pulse a barrier gate) without re-casting. */
+  mapX: number;
+  mapY: number;
 }
 
 const EPSILON = 1e-9;
@@ -68,7 +73,7 @@ export function castRay(
     }
 
     if (mapX < 0 || mapY < 0 || mapX >= map.width || mapY >= map.height) {
-      return { distance: maxRange, side, cell: -1, wallX: 0 };
+      return { distance: maxRange, side, cell: -1, wallX: 0, mapX: -1, mapY: -1 };
     }
 
     if (isSolid(map, mapX, mapY)) {
@@ -78,7 +83,7 @@ export function castRay(
           : (mapY - origin.y + (1 - stepY) / 2) / dirY;
 
       if (!(perp >= 0) || perp > maxRange) {
-        return { distance: maxRange, side, cell: -1, wallX: 0 };
+        return { distance: maxRange, side, cell: -1, wallX: 0, mapX: -1, mapY: -1 };
       }
 
       let wallX = side === 0 ? origin.y + perp * dirY : origin.x + perp * dirX;
@@ -86,13 +91,13 @@ export function castRay(
 
       const door = doorAt(map, mapX, mapY);
       const cellValue = map.cells[mapY * map.width + mapX];
-      const cell = door && !door.open ? 3 : cellValue;
+      const cell = door && !door.open ? (door.barrier ? 4 : 3) : cellValue;
 
-      return { distance: perp, side, cell, wallX };
+      return { distance: perp, side, cell, wallX, mapX, mapY };
     }
   }
 
-  return { distance: maxRange, side, cell: -1, wallX: 0 };
+  return { distance: maxRange, side, cell: -1, wallX: 0, mapX: -1, mapY: -1 };
 }
 
 export function castRayAngle(map: LevelMap, origin: { x: number; y: number }, angle: number, maxRange: number): RayHit {

@@ -6,6 +6,7 @@ import type { AssetSlot } from "./assets";
 import type { Enemy, GameState, Particle, Pickup, Projectile } from "./types";
 import { castRay } from "./raycast";
 import { quantizeAngle } from "./angle";
+import { isBruteTelegraphing } from "./enemies";
 import { ASSET_MANIFEST, getSpriteImage } from "./assets";
 import {
   BRUTE_SCALE,
@@ -20,6 +21,9 @@ import {
   INTERNAL_HEIGHT,
   INTERNAL_WIDTH,
   MAX_RENDER_DIST,
+  PARTICLE_MAX_SCREEN_PX,
+  PARTICLE_NEAR_CLIP,
+  PEDESTAL_SCALE,
   PICKUP_SCALE,
   PROJECTILE_SCALE,
   WALL_BRIGHTNESS_FLOOR,
@@ -31,9 +35,23 @@ import {
 const TAN_HALF_FOV = Math.tan(FOV_RADIANS / 2);
 const HORIZON_Y = INTERNAL_HEIGHT * HORIZON_RATIO;
 
+// One fixed-length z-buffer reused every frame — INTERNAL_WIDTH never
+// changes at runtime, and drawWalls always writes every column index before
+// anything reads it, so there is no stale-data risk in skipping the
+// per-frame `new Float64Array(...)` allocation this used to be.
+const zBuffer = new Float64Array(INTERNAL_WIDTH);
+
 function slotForCell(cell: number): AssetSlot {
+  if (cell === 4) return "barrier";
   return cell === 3 ? "door" : cell === 2 ? "wall.b" : "wall.a";
 }
+
+const PEDESTAL_SLOT: Record<string, AssetSlot> = {
+  rapid: "pedestal.rapid",
+  impact: "pedestal.impact",
+  pierce: "pedestal.pierce",
+  salvage: "pedestal.salvage",
+};
 
 /** Casts one ray per column and draws the wall it hits by sampling a vertical
  * strip of that wall's texture (real per-column texture mapping, not a
@@ -58,7 +76,8 @@ function drawWalls(ctx: CanvasRenderingContext2D, state: GameState, dirX: number
     if (drawEnd <= drawStart) continue;
 
     const slot = slotForCell(hit.cell);
-    const texture = getSpriteImage(slot);
+    const frame = slot === "barrier" ? Math.floor(state.elapsed * 4) % 2 : 0;
+    const texture = getSpriteImage(slot, frame);
 
     if (texture) {
       const texX = Math.min(texture.width - 1, Math.max(0, Math.floor(hit.wallX * texture.width)));
@@ -81,7 +100,7 @@ function drawWalls(ctx: CanvasRenderingContext2D, state: GameState, dirX: number
 interface Billboard {
   x: number;
   y: number;
-  slot: AssetSlot | null;
+  slot: AssetSlot;
   frame: number;
   fallbackColor: string;
   scale: number;
@@ -101,7 +120,12 @@ function collectBillboards(state: GameState): Billboard[] {
   for (const enemy of state.enemies as Enemy[]) {
     if (!enemy.alive) continue;
     const hit = enemy.flashTimer > 0;
-    const slot: AssetSlot = hit ? `enemy.${enemy.kind}.hit` : `enemy.${enemy.kind}.idle`;
+    const telegraphing = isBruteTelegraphing(enemy);
+    // A telegraphed brute attack flashes hard and fast between its hit-flash
+    // and idle frames — no new art, just a much more urgent version of the
+    // hit-feedback tint the player already reads as "this hurts".
+    const slot: AssetSlot = hit || telegraphing ? `enemy.${enemy.kind}.hit` : `enemy.${enemy.kind}.idle`;
+    const telegraphPulse = telegraphing ? Math.floor(state.elapsed * 12) % 2 === 0 : true;
     billboards.push({
       x: enemy.pos.x,
       y: enemy.pos.y,
@@ -109,6 +133,21 @@ function collectBillboards(state: GameState): Billboard[] {
       frame: hit ? 0 : bobFrame,
       fallbackColor: ASSET_MANIFEST[`enemy.${enemy.kind}.idle`].placeholderColor,
       scale: enemy.kind === "brute" ? BRUTE_SCALE : ENEMY_SCALE,
+      alpha: telegraphPulse ? 1 : 0.55,
+      anchor: "floor",
+    });
+  }
+
+  for (const pedestal of state.pedestals) {
+    const slot = PEDESTAL_SLOT[pedestal.kind];
+    const bob = 0.06 * Math.sin(state.elapsed * 3 + pedestal.id);
+    billboards.push({
+      x: pedestal.pos.x,
+      y: pedestal.pos.y + bob,
+      slot,
+      frame: 0,
+      fallbackColor: ASSET_MANIFEST[slot].placeholderColor,
+      scale: PEDESTAL_SCALE,
       alpha: 1,
       anchor: "floor",
     });
@@ -136,11 +175,7 @@ function collectBillboards(state: GameState): Billboard[] {
     });
   }
 
-  for (const particle of state.particles as Particle[]) {
-    billboards.push({ x: particle.pos.x, y: particle.pos.y, slot: null, frame: 0, fallbackColor: particle.color, scale: 0.15, alpha: Math.max(0, particle.ttl / particle.maxTtl), anchor: "center" });
-  }
-
-  const exitUnlocked = state.enemies.every((e) => !e.alive);
+  const exitUnlocked = state.encounter.stage === "done";
   const pulse = exitUnlocked && Math.sin(state.elapsed * 6) > 0;
   billboards.push({
     x: state.map.exit.x + 0.5,
@@ -182,7 +217,7 @@ function drawBillboards(ctx: CanvasRenderingContext2D, state: GameState, dirX: n
 
     if (transformY <= 0.05) continue;
 
-    const image = b.slot ? getSpriteImage(b.slot, b.frame) : null;
+    const image = getSpriteImage(b.slot, b.frame);
 
     // Same reference height a wall at this exact depth would draw at
     // (INTERNAL_HEIGHT / transformY, unscaled) — used both to size the
@@ -235,6 +270,48 @@ function drawBillboards(ctx: CanvasRenderingContext2D, state: GameState, dirX: n
     }
     ctx.globalAlpha = 1;
   }
+}
+
+/** Particles (muzzle flash, hit sparks, death bursts, spawn telegraphs) are
+ * small, textureless, and often near-camera — routing them through the same
+ * per-column billboard-stripe loop as real sprites means a single close-up
+ * death burst can cost thousands of one-pixel-wide drawImage/fillRect calls
+ * in one frame (a particle a few tiles wide fills most of the screen's
+ * width in stripes). Each particle here costs exactly one fillRect, sampling
+ * the z-buffer once at its own center column instead of once per stripe, and
+ * its on-screen size is capped so a particle that gets very close to the
+ * camera still can't blow up into a screen-covering rect. */
+function drawParticles(ctx: CanvasRenderingContext2D, state: GameState, dirX: number, dirY: number, planeX: number, planeY: number, zBuffer: Float64Array): void {
+  const { player, particles } = state;
+  if (particles.length === 0) return;
+
+  const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+  ctx.globalAlpha = 1;
+
+  for (const particle of particles as Particle[]) {
+    const spriteX = particle.pos.x - player.pos.x;
+    const spriteY = particle.pos.y - player.pos.y;
+
+    const transformX = invDet * (dirY * spriteX - dirX * spriteY);
+    const transformY = invDet * (-planeY * spriteX + planeX * spriteY); // depth
+
+    if (!Number.isFinite(transformX) || !Number.isFinite(transformY) || transformY <= PARTICLE_NEAR_CLIP) continue;
+
+    const screenX = Math.floor((INTERNAL_WIDTH / 2) * (1 + transformX / transformY));
+    if (screenX < 0 || screenX >= INTERNAL_WIDTH || transformY >= zBuffer[screenX]!) continue;
+
+    const wallLineHeight = INTERNAL_HEIGHT / transformY;
+    const size = Math.min(PARTICLE_MAX_SCREEN_PX, Math.max(1, Math.floor(wallLineHeight * 0.15)));
+    if (!Number.isFinite(size) || size <= 0) continue;
+
+    const screenY = Math.floor(HORIZON_Y - size / 2);
+
+    ctx.globalAlpha = Math.max(0, particle.ttl / particle.maxTtl);
+    ctx.fillStyle = particle.color;
+    ctx.fillRect(screenX - Math.floor(size / 2), screenY, size, size);
+  }
+
+  ctx.globalAlpha = 1;
 }
 
 function drawWeapon(ctx: CanvasRenderingContext2D, state: GameState): void {
@@ -297,8 +374,8 @@ export function renderFrame(ctx: CanvasRenderingContext2D, state: GameState): vo
 
   drawCeilingAndFloor(ctx);
 
-  const zBuffer = new Float64Array(INTERNAL_WIDTH);
   drawWalls(ctx, state, dirX, dirY, planeX, planeY, zBuffer);
   drawBillboards(ctx, state, dirX, dirY, planeX, planeY, zBuffer);
+  drawParticles(ctx, state, dirX, dirY, planeX, planeY, zBuffer);
   drawWeapon(ctx, state);
 }

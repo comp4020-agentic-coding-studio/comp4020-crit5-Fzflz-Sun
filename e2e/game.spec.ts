@@ -16,22 +16,23 @@ test.describe("desktop", () => {
     const canvas = page.locator("#game-canvas");
     await expect(canvas).toBeVisible();
     await expect(page.locator("#hud-health-value")).toHaveText("100");
-    await expect(page.locator("#hud-ammo-value")).toHaveText("24");
-    await expect(page.locator("#hud-enemies-value")).toHaveText("11");
+    await expect(page.locator("#hud-ammo-value")).toHaveText("16");
+    await expect(page.locator("#hud-enemies-value")).toHaveText("1");
 
     // No title/menu/tutorial screen: gameplay is live immediately, and the
     // page never scrolls.
     const overflow = await page.evaluate(() => getComputedStyle(document.body).overflow);
     expect(overflow).toBe("hidden");
 
-    // The intro enemy sits directly ahead of the start position and angle —
-    // one shot should be enough without any movement first.
+    // The intro enemy sits directly ahead of the start position and angle,
+    // and dies in one hit — a single shot should clear it without any
+    // movement first.
     await page.keyboard.down("Space");
     await page.waitForTimeout(150);
     await page.keyboard.up("Space");
 
-    await expect(page.locator("#hud-enemies-value")).toHaveText("10");
-    await expect(page.locator("#hud-ammo-value")).toHaveText("23");
+    await expect(page.locator("#hud-enemies-value")).toHaveText("0");
+    await expect(page.locator("#hud-ammo-value")).toHaveText("15");
 
     expect(errors, `console/page errors during play: ${errors.join(" | ")}`).toHaveLength(0);
   });
@@ -44,6 +45,38 @@ test.describe("desktop", () => {
     // Reaching here without a thrown error / crash is the assertion; also
     // confirm the game hasn't ended (health untouched by movement alone).
     await expect(page.locator("#hud-health-value")).toHaveText("100");
+  });
+
+  test("sustained contact with the intro enemy drains health at a steady, bounded rate with no console errors", async ({ page }) => {
+    // Regression test for the crit-5 perf fix: walking fully into an enemy
+    // used to fire a full damage tick (and a playerHurt sound + Audio
+    // allocation) every single animation frame — a GC/audio storm that
+    // stuttered the whole page. Holding contact for a few seconds (closing
+    // the initial ~3-tile gap first) should land health in a predictable
+    // band (not an instant drop to 0, not frozen at 100), and the page must
+    // stay error-free throughout.
+    test.setTimeout(15_000);
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(String(err)));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+
+    await page.goto("/");
+    // Never fire — the grunt must survive so contact damage keeps ticking.
+    await page.keyboard.down("KeyW");
+    await page.waitForTimeout(4000);
+    await page.keyboard.up("KeyW");
+
+    const healthText = await page.locator("#hud-health-value").textContent();
+    const health = Number(healthText);
+    // ~14 dps for roughly the back half of the 4s hold (the first ~1.5s is
+    // spent closing the initial gap) — a wide band that only needs to rule
+    // out "didn't drain at all" and "died/instant-dropped to 0".
+    expect(health).toBeLessThan(95);
+    expect(health).toBeGreaterThan(10);
+
+    expect(errors, `console/page errors during sustained contact: ${errors.join(" | ")}`).toHaveLength(0);
   });
 });
 
@@ -64,7 +97,7 @@ test.describe("mobile", () => {
 
     await fireButton.tap();
     await page.waitForTimeout(150);
-    await expect(page.locator("#hud-ammo-value")).toHaveText("23");
+    await expect(page.locator("#hud-ammo-value")).toHaveText("15");
   });
 
   test("every touch button meets the 44x44 tap-target minimum", async ({ page }) => {

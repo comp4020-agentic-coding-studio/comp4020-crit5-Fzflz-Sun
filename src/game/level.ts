@@ -33,13 +33,15 @@ export function buildLevel(): LevelMap {
   carve(cells, 1, 11, 9, 7); // Room D — Lab Classroom
   carve(cells, 17, 11, 9, 7); // Room C — Activity Room
 
-  // A ring of 3-tile-wide corridors connects all four rooms, so there are two
-  // routes from the entrance to the exit (via B, or via D) plus the loop
-  // formed by the ring itself.
+  // A ring of 3-tile-wide corridors connects all four rooms. Room D is a
+  // dead-end optional detour (pickups only, no enemies): its corridor to C is
+  // permanently sealed by a barrier gate, so the only way to reach Room C —
+  // and its combat — is through Room B. That keeps a wave encounter in B from
+  // ever being bypassed by ducking around through D.
   carve(cells, 10, 3, 7, 3); // corridor A -> B (door at x=10)
-  carve(cells, 20, 8, 3, 3); // corridor B -> C, open
+  carve(cells, 20, 8, 3, 3); // corridor B -> C, gated (barrier at y=9)
   carve(cells, 4, 8, 3, 3); // corridor A -> D (door at y=8)
-  carve(cells, 10, 13, 7, 3); // corridor D -> C, open
+  carve(cells, 10, 13, 7, 3); // corridor D -> C, permanently sealed (barrier at x=13)
 
   // A couple of interior wall-variant B accents so the raycaster's two wall
   // textures both show up somewhere in the level. Tucked into far corners,
@@ -89,6 +91,16 @@ export function buildLevel(): LevelMap {
     { x: 4, y: 8, open: false },
     { x: 5, y: 8, open: false },
     { x: 6, y: 8, open: false },
+    // Main gate: seals Room B's exit into Room C for the duration of the
+    // Room B encounter. Toggled only by the encounter controller.
+    { x: 20, y: 9, open: false, manual: true, barrier: true },
+    { x: 21, y: 9, open: false, manual: true, barrier: true },
+    { x: 22, y: 9, open: false, manual: true, barrier: true },
+    // Permanent seal on the D -> C shortcut, so Room D stays a dead-end
+    // pickup detour and can never be used to skip Room B's combat.
+    { x: 13, y: 13, open: false, manual: true, barrier: true },
+    { x: 13, y: 14, open: false, manual: true, barrier: true },
+    { x: 13, y: 15, open: false, manual: true, barrier: true },
   ];
 
   return {
@@ -177,11 +189,21 @@ export function moveWithCollision(map: LevelMap, pos: { x: number; y: number }, 
  * first makes the trigger uniform across the doorway's full width. */
 export function updateDoors(map: LevelMap, point: { x: number; y: number }, radius: number): void {
   for (const door of map.doors) {
-    if (door.open) continue;
+    if (door.open || door.manual) continue;
     const nearestX = Math.max(door.x, Math.min(point.x, door.x + 1));
     const nearestY = Math.max(door.y, Math.min(point.y, door.y + 1));
     const dx = nearestX - point.x;
     const dy = nearestY - point.y;
     if (Math.hypot(dx, dy) <= radius) door.open = true;
+  }
+}
+
+/** Toggles the Room B <-> C main gate (the barrier doors at y=9). This is the
+ * only door group any external code should ever open/close by hand — every
+ * other door stays proximity-triggered via updateDoors, and the D <-> C
+ * barrier at x=13 never opens at all. */
+export function setGateOpen(map: LevelMap, open: boolean): void {
+  for (const door of map.doors) {
+    if (door.barrier && door.y === 9 && door.x >= 20 && door.x <= 22) door.open = open;
   }
 }

@@ -6,12 +6,17 @@
 of mid-90s edutainment raycasters (an original game, not a clone of any real
 1998 title): one fixed level of four connected school-hall rooms (Entrance
 Hall, Locker Corridor, Lab Classroom, Activity Room) built deliberately
-oversized against a small player scale, seven enemies across three kinds
-(reframed as mascots and cleaning/vending robots), a "cream disc launcher" for
-hitscan fire against slow dodgeable enemy projectiles (now actually rendered,
-not just simulated), ammo/health pickups, and a win/loss loop with no menu,
-tutorial, or on-screen text — the controls are meant to be discoverable in the
-first few seconds of play. Pickups, projectiles, and the exit marker are still procedurally drawn at
+oversized against a small player scale, a single handgun for hitscan fire
+against slow dodgeable enemy projectiles, ammo/health pickups, and a full
+fight -> reward -> grow stronger -> harder fight -> results loop completable
+in one sitting, well under 5 minutes. Three enemy kinds (reframed as mascots
+and cleaning/vending robots) with genuinely different behavior — a fast
+melee-only chaser, a distance-keeping ranged kiter, and a slow telegraphed
+route-blocker — arrive across a scripted 16-enemy sequence of room encounters
+(a one-enemy tutorial, then two escalating two-wave rooms) rather than as a
+static level population, and the player picks one of two meaningfully
+different upgrades after each of the first two rooms from in-world pedestals,
+not a menu. Pickups, projectiles, and the exit marker are still procedurally drawn at
 runtime from a single sprite factory (`src/game/assets.ts`); a small, curated
 set of real CC0 sprites and sound effects was added on top for the two wall
 textures, the door, the three enemy kinds, and a self-contained 5-frame
@@ -138,6 +143,81 @@ where, and under what license.
    the old center-anchor behavior since they read fine either way.
    `drawBillboards` in `src/game/renderer.ts`.
 
+## 2026-08-28 — from tech demo to a short arcade run
+
+The previous version was a playable raycaster with a static population of
+seven enemies scattered across the level and no structure to the fight beyond
+"walk around and shoot whatever you see." This pass turned it into a scripted
+arcade run with a real beginning, middle, and end, while keeping every hard
+constraint from the original brief (tank controls, one handgun, no new art,
+the existing bright pastel palette and handgun animation untouched):
+
+- **Controls retuned, not redesigned.** Tank-style forward/backward/turn is
+  kept (no strafing, mouse-look, jumping, or reload was added), but every
+  number governing responsiveness moved: forward 1.95 tiles/s, backward 1.55,
+  turn 160°/s, fire cooldown 0.28s, hitscan aim tolerance 9.5°, knockback
+  0.23 tiles. The old build felt sluggish because these were all lower;
+  raising them (`src/game/constants.ts`) is the entire "control" fix.
+- **Static enemy placement replaced with room encounters.** `src/game/
+  encounters.ts` now drives a `tutorial -> upgrade1 -> freeRoam -> roomB
+  (2 waves) -> upgrade2 -> freeRoamToC -> roomC (2 waves) -> done` state
+  machine: 1 tutorial enemy + 3 + 4 + 4 + 4 across the two real rooms (16
+  total), capped at 3 simultaneous alive enemies with spawns trickled in and
+  briefly telegraphed, a gate that seals shut for the duration of each room's
+  fight, and a short pause between each room's two waves.
+- **The three enemy kinds now do genuinely different things** (`src/game/
+  enemies.ts`), not three stat blocks: Grunt is a 1-HP melee-only chaser with
+  no ranged attack at all; Scout holds a preferred distance band and pokes
+  with fast, low-damage shots; Brute is slow, barely chases, and visibly winds
+  up before a low-frequency, higher-damage shot. Difficulty comes from
+  handling a mix of these at once, not from raised HP.
+- **Kills now feel like something happened**: a ~45-60ms hit-stop (longer for
+  a Brute), a bigger particle burst, a HUD score pop, and a rising kill-sound
+  pitch on an unbroken streak — all built from the sounds/particles already in
+  the project, no new assets.
+- **Score, combo, and resource sustain moved onto the kill loop.** Base scores
+  100/150/250 (Grunt/Scout/Brute) times a streak multiplier that climbs 1→4
+  and resets to x1 only on taking damage (no time decay); every 3rd kill drops
+  a small deterministic ammo pickup and every Brute death drops a deterministic
+  health pickup — fixed map pickups were reduced accordingly since kills are
+  now the primary sustain source.
+- **Two real upgrade choices**, each offered as a pair of differently-colored
+  world pedestals (not a popup) after Room B and Room C clear: RAPID
+  (-25% cooldown) vs IMPACT (more damage, stronger knockback) after the first
+  room; PIERCE (one shot passes through the first enemy hit, no double-hit)
+  vs SALVAGE (bigger deterministic ammo/health drops) after the second.
+  Walking onto one grants it and clears both from the world; proximity shows
+  a one-line HUD description first.
+- **The existing fire button now also shoots down incoming projectiles**
+  (`resolveHitscan` in `src/game/combat.ts`) — no new keybind. Destroying a
+  projectile is checked before hitting an enemy and uses a more forgiving 14°
+  tolerance than landing a hit (9.5°), with its own cyan/white burst and
+  sound, and a one-time hint the first time a ranged enemy appears.
+- **A results screen** (`#end-overlay` in `index.html`, `hud.ts`) now appears
+  once the player reaches the exit after Room C clears: completion time,
+  score, kill count, best combo, both upgrades chosen, and a deterministic
+  S/A/B/C grade from time + score + damage taken. Restarting (`Enter`/`R`)
+  fully rebuilds state via `createInitialState()` — no leftover upgrades,
+  score, or combo from the previous run.
+
+Verification: the full existing check suite (`pnpm check` — 44 unit/spec
+tests across encounter progression, the simultaneous-enemy cap, scoring/combo,
+resource drops, PIERCE, and projectile destruction — plus typecheck, build,
+lint) and the Playwright e2e suite (`pnpm test:e2e`) both pass. A scripted
+autopilot drove the actual built site in a real browser end to end (real
+`requestAnimationFrame`/keyboard-event timing, not a headless simulation) and
+reached the results screen with all 16 enemies cleared and a grade of A,
+confirming the full loop and the results screen both work under real
+per-frame timing. That run finished in about a minute of in-game clock time,
+which is not a human-pacing estimate — a bot with near-perfect aim and
+pathing plays much faster than the 3.5-4.5 minute target assumes for a person
+who aims, occasionally misses, and looks around a room; no live human
+playtest was recorded this session, so the target pacing window is the
+design intent, not a directly measured result. All scaffolding written to
+verify this behavior (a headless playtest bot, a live-browser autopilot
+script, and their temporary state-inspection hooks) was deleted once each
+check passed — none of it shipped.
+
 ## Known limitations / left as placeholder
 
 - Most visuals are still procedurally-drawn flat-color/geometric-shape
@@ -149,8 +229,9 @@ where, and under what license.
 - Audio is minimal: seven short cues (fire, enemy hit, enemy death, player
   hurt, two pickup types, door open), unlocked after the first keyboard/touch
   interaction per browser autoplay policy. No background music.
-- The headless playtest bot used to verify winnability (moment 5) is a
+- Every automated playthrough check (headless and in-browser) has been a
   scripted proxy for a human, not a real cold-start playtester; the
   Playwright e2e suite and manual play (moments 1, 4, 6) cover real browser
   timing and real input, but a live human playtest is still worth doing
-  before calling the difficulty/pacing tuning final.
+  before calling the wave/upgrade balance and the 3.5-4.5 minute pacing
+  target final.

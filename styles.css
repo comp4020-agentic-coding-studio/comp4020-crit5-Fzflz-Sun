@@ -49,6 +49,7 @@ body {
 }
 
 #game-stage {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -88,6 +89,37 @@ body {
 .hud-icon {
   width: 1.05rem;
   height: 1.05rem;
+}
+
+/* Score/multiplier pulse is driven from hud.ts via the Web Animations API
+   (el.animate(...) on scale), not a CSS keyframe/class toggle — but the
+   transform it applies still needs a non-static inline box to take effect. */
+#hud-score-value,
+#hud-multiplier-value {
+  display: inline-block;
+}
+
+/* Absolutely positioned over the top edge of the canvas (not a normal flex
+   sibling of #hud) so it never adds to the flow height main.ts's
+   resizeCanvas() budgets for — it only ever shows briefly near a pedestal or
+   the first time a ranged enemy appears. */
+#hint-banner {
+  position: absolute;
+  top: 0.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 0.3rem 0.6rem;
+  background: rgb(38 54 76 / 78%);
+  color: var(--cream);
+  font: 700 0.72rem/1.2 "Courier New", ui-monospace, monospace;
+  text-align: center;
+  border: 1px solid var(--ink);
+  pointer-events: none;
+}
+
+#hint-banner[hidden] {
+  display: none;
 }
 
 /* Docked directly under #game-stage as a normal flex sibling (not a fixed
@@ -170,6 +202,49 @@ body {
 
 #end-overlay.is-lose {
   background: rgb(241 163 107 / 55%);
+}
+
+#end-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 1.4rem;
+  background: rgb(255 255 255 / 92%);
+  border: 3px solid var(--ink);
+  color: var(--ink);
+  font-family: "Courier New", ui-monospace, monospace;
+}
+
+#end-title {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#end-stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.15rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+#end-stats > div {
+  display: contents;
+}
+
+#end-stats dt {
+  font-weight: 400;
+  opacity: 0.75;
+  text-align: right;
+}
+
+#end-stats dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: left;
 }
 
 .retry-btn {
