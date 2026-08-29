@@ -1,41 +1,44 @@
 // Sensor: the numbers a cold-start player is promised (full health, a full
-// magazine, a lone tutorial enemy) and the guarantee that the very first
-// enemy is a safe, aimed freebie. The rest of the run's enemies arrive later
-// via the room-encounter waves in encounters.ts, not at spawn — these checks
-// are cheap to silently drift as the level or enemy defs change, and nothing
-// else catches that drift — this does.
+// magazine, an empty battlefield) and that a fresh run boots straight into
+// wave 1's combat phase with the Director not yet having spawned anything.
+// These checks are cheap to silently drift as constants/wave defaults change,
+// and nothing else catches that drift — this does.
 import { describe, expect, it } from "vitest";
-import { createInitialState } from "../src/game/state";
+import { createInitialState, createTitleState } from "../src/game/state";
 import { STARTING_AMMO, STARTING_HEALTH } from "../src/game/constants";
 
 describe("createInitialState baseline", () => {
-  it("starts the player at full health and a full magazine", () => {
+  it("starts the player at full health and a full magazine, screen already playing", () => {
     const state = createInitialState();
     expect(state.player.health).toBe(STARTING_HEALTH);
     expect(state.player.ammo).toBe(STARTING_AMMO);
-    expect(state.phase).toBe("playing");
+    expect(state.screen).toBe("playing");
   });
 
-  it("spawns exactly one living (tutorial) enemy at start", () => {
+  it("starts with no enemies alive yet — the Director spawns wave 1's first enemy itself", () => {
     const state = createInitialState();
-    expect(state.enemies).toHaveLength(1);
-    expect(state.enemies.every((e) => e.alive)).toBe(true);
+    expect(state.enemies).toHaveLength(0);
   });
 
-  it("aims the player straight at the first (intro) enemy with no turning needed", () => {
+  it("starts on wave 1's combat phase with a fresh spawn timer", () => {
     const state = createInitialState();
-    const intro = state.enemies[0]!;
-    const dx = intro.pos.x - state.player.pos.x;
-    const dy = intro.pos.y - state.player.pos.y;
-    const angleToIntro = Math.atan2(dy, dx);
-    // A stranger's very first Space-press must land without any turning —
-    // that's the whole tutorial. Half a degree of slack for future tuning.
-    expect(Math.abs(angleToIntro - state.player.angle)).toBeLessThan((0.5 * Math.PI) / 180);
+    expect(state.wave.number).toBe(1);
+    expect(state.wave.phase).toBe("combat");
+    expect(state.wave.spawnTimer).toBeGreaterThan(0);
   });
 
-  it("keeps the intro enemy slow enough to give a stranger several seconds of safety", () => {
+  it("starts with zero score, stats, and no upgrades", () => {
     const state = createInitialState();
-    const intro = state.enemies[0]!;
-    expect(intro.speed).toBeLessThan(0.2);
+    expect(state.score).toBe(0);
+    expect(state.stats.totalKills).toBe(0);
+    expect(Object.values(state.upgrades).every((lvl) => lvl === 0)).toBe(true);
+  });
+});
+
+describe("createTitleState", () => {
+  it("builds a full playable world but starts on the title screen", () => {
+    const state = createTitleState();
+    expect(state.screen).toBe("title");
+    expect(state.player.health).toBe(STARTING_HEALTH);
   });
 });

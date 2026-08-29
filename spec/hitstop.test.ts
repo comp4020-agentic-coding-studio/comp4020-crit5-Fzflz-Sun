@@ -66,6 +66,7 @@ describe("selective hit-stop", () => {
   it("pauses enemy-side movement while hit-stop is active, and resumes once it fully drains", () => {
     const state = createInitialState();
     const chaser = spawnEnemy("grunt", { x: 4, y: 4 }, { speed: 5 });
+    chaser.state = "alert"; // isolate hit-stop's movement pause from LOS/alerting
     state.enemies = [chaser];
     state.hitStopTimer = HITSTOP_KILL_NORMAL;
     const input = createInputState();
@@ -95,7 +96,8 @@ describe("selective hit-stop", () => {
   it("a single enemy death triggers hit-stop exactly once — reprocessing the same now-dead enemy never refreshes or extends it", () => {
     const state = createInitialState();
     state.hitStopTimer = 0;
-    const enemy = state.enemies[0]!; // grunt, 1 HP — one hit is lethal
+    const enemy = spawnEnemy("grunt", { x: 5, y: 5 }); // 1 HP — one hit is lethal
+    state.enemies = [enemy];
 
     applyHitscanDamage(state, enemy, 100);
     expect(enemy.alive).toBe(false);

@@ -122,6 +122,29 @@ body {
   display: none;
 }
 
+/* Non-interrupting: shown for a few seconds at the 5-minute mark, never
+   blocks input or pauses the world (Section 7) — same absolute-over-canvas
+   placement as #hint-banner so it never affects resizeCanvas()'s layout math,
+   docked to the bottom edge instead of the top so the two never overlap. */
+#milestone-banner {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 92%;
+  padding: 0.3rem 0.6rem;
+  background: rgb(38 54 76 / 78%);
+  color: var(--cream);
+  font: 700 0.72rem/1.2 "Courier New", ui-monospace, monospace;
+  text-align: center;
+  border: 1px solid var(--ink);
+  pointer-events: none;
+}
+
+#milestone-banner[hidden] {
+  display: none;
+}
+
 /* Docked directly under #game-stage as a normal flex sibling (not a fixed
    overlay) so the two sit flush together and get centered as one block —
    a fixed overlay here left a stray gap between the HUD and the buttons,
@@ -175,40 +198,50 @@ body {
   height: 1.8rem;
 }
 
+.touch-pause {
+  background: rgb(219 114 181 / 88%);
+  align-self: flex-end;
+  pointer-events: auto;
+}
+
 @media (hover: none), (pointer: coarse) {
   #touch-controls {
     display: flex;
   }
 }
 
-#end-overlay {
+/* Shared by every DOM menu (title, pause, save/load, confirm, upgrade,
+   results, how-to-play) — one fixed semi-transparent backdrop plus one
+   bordered square panel, matching the original #end-overlay/#end-panel pair.
+   main.ts shows exactly one of these at a time, keyed off state.screen. */
+.menu-overlay {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgb(38 54 76 / 45%);
+
+  /* Only the panel itself scrolls if content overflows a short viewport
+     (Section 10) — the backdrop, and the page behind it, never do. */
+  overflow: hidden;
+  padding: 1rem;
 }
 
-/* The `hidden` attribute's UA-stylesheet `display: none` loses to the ID rule
-   above (same origin, ID beats attribute selector) unless restated here. */
-#end-overlay[hidden] {
+/* The `hidden` attribute's UA-stylesheet `display: none` loses to the class
+   rule above (equal specificity, source order) unless restated here. */
+.menu-overlay[hidden] {
   display: none;
 }
 
-#end-overlay.is-win {
-  background: rgb(157 225 226 / 60%);
-}
-
-#end-overlay.is-lose {
-  background: rgb(241 163 107 / 55%);
-}
-
-#end-panel {
+.menu-panel {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: stretch;
+  gap: 0.7rem;
+  width: min(100%, 20rem);
+  max-height: 100%;
+  overflow-y: auto;
   padding: 1rem 1.4rem;
   background: rgb(255 255 255 / 92%);
   border: 3px solid var(--ink);
@@ -216,14 +249,173 @@ body {
   font-family: "Courier New", ui-monospace, monospace;
 }
 
-#end-title {
+.menu-panel-wide {
+  width: min(100%, 30rem);
+}
+
+.menu-title {
   margin: 0;
   font-size: 1.1rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  text-align: center;
 }
 
-#end-stats {
+.menu-subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.menu-list-row {
+  flex-direction: row;
+  justify-content: center;
+}
+
+.menu-option {
+  min-height: 44px;
+  padding: 0.5rem 0.8rem;
+  background: rgb(188 216 234 / 88%);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font: 700 0.85rem/1.2 "Courier New", ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.menu-option:hover,
+.menu-option:focus-visible {
+  background: rgb(157 225 226 / 95%);
+  outline: none;
+}
+
+/* Explicit selection state (Section 10) for arrow-key cycling — distinct from
+   :focus-visible so a mouse hover and a keyboard-selected option never look
+   the same by accident. */
+.menu-option.is-selected {
+  background: var(--peach);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.menu-option:disabled {
+  background: rgb(113 134 155 / 35%);
+  color: rgb(38 54 76 / 55%);
+  cursor: not-allowed;
+}
+
+.slot-list .menu-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.slot-list .slot-title {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.slot-list .slot-detail {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.how-to-play-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.2rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.how-to-play-list > div {
+  display: contents;
+}
+
+.how-to-play-list dt {
+  font-weight: 400;
+  opacity: 0.75;
+  text-align: right;
+}
+
+.how-to-play-list dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: left;
+}
+
+.upgrade-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.6rem;
+}
+
+.upgrade-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.7rem;
+  background: rgb(188 216 234 / 88%);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-family: "Courier New", ui-monospace, monospace;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.upgrade-card:hover,
+.upgrade-card:focus-visible {
+  background: rgb(157 225 226 / 95%);
+  outline: none;
+}
+
+.upgrade-card.is-selected {
+  background: var(--peach);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.upgrade-card .upgrade-key {
+  align-self: flex-start;
+  padding: 0.05rem 0.35rem;
+  background: var(--ink);
+  color: var(--cream);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.upgrade-card .upgrade-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.upgrade-card .upgrade-level {
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+
+.upgrade-card .upgrade-description {
+  font-size: 0.75rem;
+}
+
+.upgrade-card .upgrade-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--pink);
+}
+
+#results-stats {
   margin: 0;
   display: grid;
   grid-template-columns: auto auto;
@@ -231,36 +423,18 @@ body {
   font-size: 0.85rem;
 }
 
-#end-stats > div {
+#results-stats > div {
   display: contents;
 }
 
-#end-stats dt {
+#results-stats dt {
   font-weight: 400;
   opacity: 0.75;
   text-align: right;
 }
 
-#end-stats dd {
+#results-stats dd {
   margin: 0;
   font-weight: 700;
   text-align: left;
-}
-
-.retry-btn {
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 50%;
-  border: 3px solid var(--ink);
-  background: rgb(183 166 229 / 95%);
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.retry-btn svg {
-  width: 2.2rem;
-  height: 2.2rem;
 }

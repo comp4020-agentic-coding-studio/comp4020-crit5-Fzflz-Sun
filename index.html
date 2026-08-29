@@ -9,7 +9,7 @@
     <title>PIE HALL 98</title>
     <meta
       name="description"
-      content="A short browser school-hall shooter rendered with a 2D raycasting engine — fight through waves, pick two upgrades, and clear the exit in under five minutes."
+      content="An infinite-survival browser school-hall shooter rendered with a 2D raycasting engine — fight endless waves, bank leveled upgrades between them, and see how long you last."
     />
 
     <meta property="og:type" content="website" />
@@ -54,9 +54,14 @@
           <div class="hud-item">
             <span id="hud-timer-value">0:00</span>
           </div>
+          <div class="hud-item">
+            <span>W</span>
+            <span id="hud-wave-value">1</span>
+          </div>
         </div>
 
         <div id="hint-banner" aria-hidden="true" hidden></div>
+        <div id="milestone-banner" aria-hidden="true" hidden></div>
       </div>
 
       <div id="touch-controls" aria-hidden="true">
@@ -74,27 +79,122 @@
             <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 20l8-10H4z"/></svg>
           </button>
         </div>
+        <button id="btn-pause" class="touch-btn touch-pause" type="button">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+        </button>
         <button id="btn-fire" class="touch-btn touch-fire" type="button">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>
         </button>
       </div>
 
-      <div id="end-overlay" hidden>
-        <div id="end-panel">
-          <h2 id="end-title">Cleared!</h2>
-          <dl id="end-stats">
-            <div><dt>Time</dt><dd id="end-time-value">0:00</dd></div>
-            <div><dt>Score</dt><dd id="end-score-value">0</dd></div>
-            <div><dt>Kills</dt><dd id="end-kills-value">0</dd></div>
-            <div><dt>Best combo</dt><dd id="end-combo-value">x1</dd></div>
-            <div><dt>Upgrades</dt><dd id="end-upgrades-value">None</dd></div>
-            <div><dt>Grade</dt><dd id="end-grade-value">-</dd></div>
+      <!-- Every menu below shares the .menu-overlay/.menu-panel pixel-panel
+           pattern (see styles.css); main.ts toggles [hidden] on exactly one
+           at a time, keyed off state.screen. -->
+
+      <div id="title-screen" class="menu-overlay" hidden>
+        <div class="menu-panel">
+          <h2 class="menu-title">PIE HALL 98</h2>
+          <p class="menu-subtitle">Survive as long as you can.</p>
+          <div class="menu-list">
+            <button id="btn-new-game" class="menu-option" type="button">New Game</button>
+            <button id="btn-continue" class="menu-option" type="button">Continue</button>
+            <button id="btn-load-game" class="menu-option" type="button">Load Game</button>
+            <button id="btn-how-to-play" class="menu-option" type="button">How to Play</button>
+            <button id="btn-end-game" class="menu-option" type="button">End Game</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="how-to-play" class="menu-overlay" hidden>
+        <div class="menu-panel">
+          <h2 class="menu-title">How to Play</h2>
+          <dl class="how-to-play-list">
+            <div><dt>Move</dt><dd>W/S or &uarr;/&darr;</dd></div>
+            <div><dt>Turn</dt><dd>A/D or &larr;/&rarr;</dd></div>
+            <div><dt>Fire</dt><dd>Space, Ctrl, or click/tap</dd></div>
+            <div><dt>Pause</dt><dd>Esc or P</dd></div>
           </dl>
-          <button id="btn-retry" class="retry-btn" type="button">
-            <svg viewBox="0 0 24 24">
-              <path fill="currentColor" d="M12 4V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/>
-            </svg>
-          </button>
+          <p class="menu-subtitle">
+            Clear each wave's spawns, pick one of three upgrades between waves, and keep going —
+            the run only ends when you do.
+          </p>
+          <div class="menu-list">
+            <button id="btn-how-to-play-back" class="menu-option" type="button">Back</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="pause-menu" class="menu-overlay" hidden>
+        <div class="menu-panel">
+          <h2 class="menu-title">Paused</h2>
+          <div class="menu-list">
+            <button id="btn-resume" class="menu-option" type="button">Resume</button>
+            <button id="btn-save-game" class="menu-option" type="button">Save Game</button>
+            <button id="btn-load-game-pause" class="menu-option" type="button">Load Game</button>
+            <button id="btn-restart-run" class="menu-option" type="button">Restart Run</button>
+            <button id="btn-end-run" class="menu-option" type="button">End Run</button>
+            <button id="btn-return-menu" class="menu-option" type="button">Return to Main Menu</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="save-menu" class="menu-overlay" hidden>
+        <div class="menu-panel">
+          <h2 class="menu-title">Save Game</h2>
+          <p id="save-status" class="menu-subtitle" aria-live="polite"></p>
+          <div id="save-slot-list" class="menu-list slot-list"></div>
+          <div class="menu-list">
+            <button id="btn-save-back" class="menu-option" type="button">Back</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="load-menu" class="menu-overlay" hidden>
+        <div class="menu-panel">
+          <h2 class="menu-title">Load Game</h2>
+          <p id="load-status" class="menu-subtitle" aria-live="polite"></p>
+          <div id="load-slot-list" class="menu-list slot-list"></div>
+          <div class="menu-list">
+            <button id="btn-load-back" class="menu-option" type="button">Back</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="confirm-dialog" class="menu-overlay" hidden>
+        <div class="menu-panel">
+          <h2 class="menu-title">Are you sure?</h2>
+          <p id="confirm-message" class="menu-subtitle"></p>
+          <div class="menu-list menu-list-row">
+            <button id="btn-confirm-yes" class="menu-option" type="button">Confirm</button>
+            <button id="btn-confirm-no" class="menu-option" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="upgrade-menu" class="menu-overlay" hidden>
+        <div class="menu-panel menu-panel-wide">
+          <h2 class="menu-title">Choose an Upgrade</h2>
+          <div id="upgrade-cards" class="upgrade-cards"></div>
+        </div>
+      </div>
+
+      <div id="results-screen" class="menu-overlay" hidden>
+        <div class="menu-panel">
+          <h2 id="results-title" class="menu-title">Run Over</h2>
+          <dl id="results-stats">
+            <div><dt>Time</dt><dd id="results-time-value">0:00</dd></div>
+            <div><dt>Wave</dt><dd id="results-wave-value">1</dd></div>
+            <div><dt>Score</dt><dd id="results-score-value">0</dd></div>
+            <div><dt>Kills</dt><dd id="results-kills-value">0</dd></div>
+            <div><dt>Best combo</dt><dd id="results-combo-value">x1</dd></div>
+            <div><dt>Upgrades</dt><dd id="results-upgrades-value">None</dd></div>
+            <div><dt>5-min milestone</dt><dd id="results-milestone-value">No</dd></div>
+            <div><dt>Grade</dt><dd id="results-grade-value">-</dd></div>
+          </dl>
+          <div class="menu-list">
+            <button id="btn-play-again" class="menu-option" type="button">Play Again</button>
+            <button id="btn-results-menu" class="menu-option" type="button">Main Menu</button>
+          </div>
         </div>
       </div>
     </main>

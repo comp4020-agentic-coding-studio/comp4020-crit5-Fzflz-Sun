@@ -1,84 +1,112 @@
-// Pre-spawn safety regression tests (crit-5 perf fix #2, spawn half). Before
-// this fix a wave could spawn an enemy embedded in a wall, stacked exactly on
-// the player, or overlapping another alive enemy. The fix checks each
-// intended spawn point against a small fixed fallback-offset list and, if
-// every candidate is unsafe, defers the spawn by a short fixed delay instead
-// of spinning or spawning unsafely. These tests drive updateEncounter's real
-// wave-spawning path (updateWaveSpawning / isSpawnPositionSafe /
-// findSafeSpawnPos are internal, so they're exercised through the public
-// stage machine, same as the existing "simultaneous enemy cap" test).
+// Pre-spawn safety regression tests (Section 4 of the crit-5 infinite-survival
+// spec) — rewritten against the actual Spawn Director API (director.ts's
+// pickSpawnAnchor), which replaced the old fallback-offset/pending-retry
+// mechanism entirely. A candidate anchor is rejected outright if it sits in a
+// solid cell, is nearer than SPAWN_MIN_PLAYER_DIST to the player, is visible
+// to the player and not far enough to read as a fair telegraph, is on
+// cooldown, or was used in one of the last few spawns.
 import { describe, expect, it } from "vitest";
 import { createInitialState } from "../src/game/state";
-import { spawnEnemy } from "../src/game/enemies";
-import { updateEncounter } from "../src/game/encounters";
-import { SPAWN_RETRY_DELAY } from "../src/game/constants";
+import { pickSpawnAnchor } from "../src/game/director";
+import { isSolid } from "../src/game/level";
+import { SPAWN_MIN_PLAYER_DIST } from "../src/game/constants";
+import type { LevelMap, SpawnAnchor } from "../src/game/types";
 
-function armRoomBSpawning(state: ReturnType<typeof createInitialState>): void {
-  state.encounter.stage = "roomB";
-  state.encounter.pauseTimer = 0;
-  state.encounter.waveIndex = 1;
-  state.encounter.waveQueue = [];
-  state.enemies = [];
+function testMap(overrides: Partial<LevelMap> = {}): LevelMap {
+  return {
+    width: 30,
+    height: 20,
+    cells: Array.from({ length: 600 }, () => 0),
+    doors: [],
+    exit: { x: 29, y: 19 },
+    zones: [{ id: "z1", name: "Test Zone", x0: 0, y0: 0, x1: 30, y1: 20 }],
+    anchors: [],
+    ...overrides,
+  };
 }
 
-describe("pre-spawn safety", () => {
-  it("never spawns an enemy embedded in a wall — defers with the bounded retry delay instead", () => {
+function wallAt(map: LevelMap, x: number, y: number): LevelMap {
+  const cells = [...map.cells];
+  cells[y * map.width + x] = 1;
+  return { ...map, cells };
+}
+
+function anchor(id: number, x: number, y: number): SpawnAnchor {
+  return { id, pos: { x, y }, zoneId: "z1" };
+}
+
+describe("pre-spawn safety — pickSpawnAnchor", () => {
+  it("never returns an anchor embedded in a solid cell", () => {
+    let map = testMap({ anchors: [anchor(1, 5, 5)] });
+    map = wallAt(map, 5, 5);
     const state = createInitialState();
-    armRoomBSpawning(state);
-    state.player.pos = { x: 3, y: 3.5 }; // far from the test point, in room A
+    state.map = map;
+    state.player.pos = { x: 25, y: 15 }; // far from the walled anchor
 
-    const wallPos = { x: 13, y: 9 }; // solid: between rooms, not carved by any corridor
-    state.encounter.pending = [{ kind: "grunt", pos: wallPos, telegraphTimer: 0 }];
-
-    updateEncounter(state, 0.001);
-
-    expect(state.enemies).toHaveLength(0);
-    expect(state.encounter.pending).toHaveLength(1);
-    expect(state.encounter.pending[0]!.telegraphTimer).toBeCloseTo(SPAWN_RETRY_DELAY, 5);
+    expect(isSolid(map, 5, 5)).toBe(true);
+    expect(pickSpawnAnchor(state)).toBeNull();
   });
 
-  it("never spawns an enemy on top of the player, and spawns once the player moves away", () => {
+  it("never returns an anchor closer than SPAWN_MIN_PLAYER_DIST to the player", () => {
+    const map = testMap({ anchors: [anchor(1, 5, 5)] });
     const state = createInitialState();
-    armRoomBSpawning(state);
+    state.map = map;
+    state.player.pos = { x: 5.5, y: 5 }; // well inside the min-distance radius
 
-    const spawnPos = { x: 5, y: 5 }; // open room-A interior
-    state.player.pos = { ...spawnPos }; // player is standing exactly on the intended spawn point
-    state.encounter.pending = [{ kind: "grunt", pos: spawnPos, telegraphTimer: 0 }];
-
-    updateEncounter(state, 0.001);
-
-    expect(state.enemies).toHaveLength(0);
-    expect(state.encounter.pending).toHaveLength(1);
-    expect(state.encounter.pending[0]!.telegraphTimer).toBeCloseTo(SPAWN_RETRY_DELAY, 5);
-
-    // The player walks away; the same intended point is now clear.
-    state.player.pos = { x: 8, y: 2 };
-    updateEncounter(state, state.encounter.pending[0]!.telegraphTimer);
-
-    expect(state.enemies).toHaveLength(1);
-    expect(state.enemies[0]!.pos).toEqual(spawnPos);
-    expect(state.encounter.pending).toHaveLength(0);
+    expect(pickSpawnAnchor(state)).toBeNull();
   });
 
-  it("never spawns an enemy overlapping another alive enemy — falls back to the nearest safe offset", () => {
+  it("never returns an anchor that is visible and too close to read as a fair telegraph, even past the raw minimum distance", () => {
+    const map = testMap({ anchors: [anchor(1, 5, 5 + SPAWN_MIN_PLAYER_DIST + 1)] });
     const state = createInitialState();
-    armRoomBSpawning(state);
-    state.player.pos = { x: 20, y: 2 }; // far from the test point
+    state.map = map; // fully open map: the anchor is in clear line of sight
+    state.player.pos = { x: 5, y: 5 };
 
-    const spot = { x: 5, y: 5 }; // open room-A interior
-    const existing = spawnEnemy("grunt", { ...spot });
-    state.enemies = [existing];
-    state.encounter.pending = [{ kind: "grunt", pos: spot, telegraphTimer: 0 }];
+    expect(pickSpawnAnchor(state)).toBeNull();
+  });
 
-    updateEncounter(state, 0.001);
+  it("picks the only eligible anchor once it clears both distance and visibility slack", () => {
+    const map = testMap({ anchors: [anchor(1, 5, 5 + SPAWN_MIN_PLAYER_DIST + 4)] });
+    const state = createInitialState();
+    state.map = map;
+    state.player.pos = { x: 5, y: 5 };
 
-    // The base point and the two closest fallback offsets (0.6 away) are all
-    // still within SPAWN_SAFE_ENEMY_DIST of the existing enemy — only the
-    // diagonal (0.6, 0.6) offset (~0.849 away) clears it.
-    const spawned = state.enemies.find((e) => e !== existing);
-    expect(spawned).toBeDefined();
-    expect(spawned!.pos.x).toBeCloseTo(spot.x + 0.6, 5);
-    expect(spawned!.pos.y).toBeCloseTo(spot.y + 0.6, 5);
-    expect(state.encounter.pending).toHaveLength(0);
+    const picked = pickSpawnAnchor(state);
+    expect(picked?.id).toBe(1);
+  });
+
+  it("never returns an anchor currently on cooldown", () => {
+    const map = testMap({
+      anchors: [anchor(1, 5, 5), anchor(2, 25, 5)],
+    });
+    const state = createInitialState();
+    state.map = map;
+    state.player.pos = { x: 15, y: 18 };
+    state.director.anchorCooldowns = { 1: 3 };
+
+    const picked = pickSpawnAnchor(state);
+    expect(picked?.id).toBe(2);
+  });
+
+  it("never returns an anchor used in one of the last few spawns while an untouched alternative exists", () => {
+    const map = testMap({
+      anchors: [anchor(1, 5, 5), anchor(2, 25, 5)],
+    });
+    const state = createInitialState();
+    state.map = map;
+    state.player.pos = { x: 15, y: 18 };
+    state.director.recentAnchors = [1];
+
+    const picked = pickSpawnAnchor(state);
+    expect(picked?.id).toBe(2);
+  });
+
+  it("returns null when every anchor is unsafe — never falls back to an unsafe spawn", () => {
+    const map = testMap({ anchors: [anchor(1, 5, 5)] });
+    const state = createInitialState();
+    state.map = map;
+    state.player.pos = { x: 5.2, y: 5 }; // the only anchor is inside the min-distance radius
+
+    expect(pickSpawnAnchor(state)).toBeNull();
   });
 });

@@ -9,7 +9,6 @@ import { castRay } from "./raycast";
 import { moveWithCollision } from "./level";
 import {
   BRUTE_HEALTH_DROP_AMOUNT,
-  BRUTE_HEALTH_DROP_AMOUNT_SALVAGE,
   BRUTE_KILL_PARTICLE_MULTIPLIER,
   COLOR_CREAM,
   COLOR_CYAN,
@@ -17,10 +16,9 @@ import {
   COLOR_ICE,
   COLOR_LAVENDER,
   COMBO_KILLS_PER_STEP,
-  COMBO_MAX_MULTIPLIER,
   DEATH_PARTICLE_COUNT,
   DEATH_PARTICLE_TTL,
-  FIRE_COOLDOWN,
+  ENEMY_DEATH_GRACE,
   HITSCAN_AIM_TOLERANCE,
   HITSCAN_DAMAGE,
   HITSCAN_RANGE,
@@ -28,22 +26,27 @@ import {
   HITSTOP_KILL_NORMAL,
   HIT_FLASH_DURATION,
   HIT_PARTICLE_COUNT,
-  IMPACT_DAMAGE_MULTIPLIER,
-  IMPACT_KNOCKBACK_MULTIPLIER,
   KILL_AMMO_DROP_AMOUNT,
-  KILL_AMMO_DROP_AMOUNT_SALVAGE,
   KILL_AMMO_DROP_INTERVAL,
   KILL_PARTICLE_MULTIPLIER,
-  KNOCKBACK_DISTANCE,
   MUZZLE_PARTICLE_TTL,
-  PROJECTILE_DESTROY_AIM_TOLERANCE,
+  PICKUP_DESPAWN_TTL,
   PROJECTILE_DESTROY_RANGE,
-  RAPID_COOLDOWN_MULTIPLIER,
   SCORE_BRUTE,
   SCORE_GRUNT,
   SCORE_SCOUT,
   WEAPON_FIRE_ANIM_DURATION,
 } from "./constants";
+import {
+  armourDamageReduction,
+  comboMaxMultiplier,
+  impactDamageBonus,
+  impactKnockback,
+  interceptAimTolerance,
+  pierceMaxTargets,
+  rapidFireCooldown,
+  salvageBonusMultiplier,
+} from "./upgrades";
 
 function normalizeAngle(angle: number): number {
   let a = angle % (Math.PI * 2);
@@ -56,11 +59,18 @@ function normalizeAngle(angle: number): number {
  * (contact, projectile) routes through here so `hurtEventId` is a reliable
  * "the player was just hurt" signal for audio/HUD/combo-reset — decoupled
  * from comparing health across frames, which can't be throttled and can't
- * tell one real hit apart from several small ones landing the same frame. */
+ * tell one real hit apart from several small ones landing the same frame.
+ * ARMOUR's reduction applies here so it covers every damage source uniformly. */
 export function applyPlayerDamage(state: GameState, amount: number): void {
   if (amount <= 0) return;
-  state.player.health = Math.max(0, state.player.health - amount);
+  const reduced = amount * (1 - armourDamageReductionOf(state));
+  state.player.health = Math.max(0, state.player.health - reduced);
   state.hurtEventId += 1;
+  state.damageTaken += reduced;
+}
+
+function armourDamageReductionOf(state: GameState): number {
+  return armourDamageReduction(state.upgrades.armour);
 }
 
 /** All alive, unoccluded, in-tolerance enemies along a ray, nearest first,
@@ -167,51 +177,55 @@ function spawnHitSpark(state: GameState, pos: Vec2): void {
   }
 }
 
+function bumpKindStat(state: GameState, kind: Enemy["kind"]): void {
+  state.stats.totalKills += 1;
+  if (kind === "grunt") state.stats.gruntKills += 1;
+  else if (kind === "scout") state.stats.scoutKills += 1;
+  else state.stats.bruteKills += 1;
+}
+
 function killEnemy(state: GameState, enemy: Enemy): void {
   const baseScore = enemy.kind === "grunt" ? SCORE_GRUNT : enemy.kind === "scout" ? SCORE_SCOUT : SCORE_BRUTE;
   state.score += baseScore * state.multiplier;
-  state.killCount += 1;
+  bumpKindStat(state, enemy.kind);
   state.comboKills += 1;
-  state.multiplier = Math.min(COMBO_MAX_MULTIPLIER, 1 + Math.floor(state.comboKills / COMBO_KILLS_PER_STEP));
+  const comboCap = comboMaxMultiplier(state.upgrades.combo);
+  state.multiplier = Math.min(comboCap, 1 + Math.floor(state.comboKills / COMBO_KILLS_PER_STEP));
   state.bestMultiplier = Math.max(state.bestMultiplier, state.multiplier);
 
   const isBrute = enemy.kind === "brute";
   state.hitStopTimer = Math.max(state.hitStopTimer, isBrute ? HITSTOP_KILL_BRUTE : HITSTOP_KILL_NORMAL);
+  enemy.deathTimer = ENEMY_DEATH_GRACE;
 
   const particleMultiplier = isBrute ? BRUTE_KILL_PARTICLE_MULTIPLIER : KILL_PARTICLE_MULTIPLIER;
   spawnDeathBurst(state, enemy.pos, Math.round(DEATH_PARTICLE_COUNT * particleMultiplier));
 
-  if (state.killCount % KILL_AMMO_DROP_INTERVAL === 0) {
-    state.nextId += 1;
-    state.pickups.push({
-      id: state.nextId,
-      kind: "ammo",
-      pos: { x: enemy.pos.x, y: enemy.pos.y },
-      collected: false,
-      amount: state.upgrades.salvage ? KILL_AMMO_DROP_AMOUNT_SALVAGE : KILL_AMMO_DROP_AMOUNT,
-    });
+  const salvage = salvageBonusMultiplier(state.upgrades.salvage);
+  if (state.stats.totalKills % KILL_AMMO_DROP_INTERVAL === 0) {
+    pushPickup(state, "ammo", enemy.pos, Math.round(KILL_AMMO_DROP_AMOUNT * salvage));
   }
   if (isBrute) {
-    state.nextId += 1;
-    state.pickups.push({
-      id: state.nextId,
-      kind: "health",
-      pos: { x: enemy.pos.x + 0.25, y: enemy.pos.y + 0.25 },
-      collected: false,
-      amount: state.upgrades.salvage ? BRUTE_HEALTH_DROP_AMOUNT_SALVAGE : BRUTE_HEALTH_DROP_AMOUNT,
-    });
+    pushPickup(state, "health", { x: enemy.pos.x + 0.25, y: enemy.pos.y + 0.25 }, Math.round(BRUTE_HEALTH_DROP_AMOUNT * salvage));
   }
 }
 
+/** Pushes a kill-drop pickup with a despawn TTL — the caller in state.ts's
+ * cleanupPickups() enforces MAX_GROUND_PICKUPS while always sparing the
+ * newest entry, so this never needs a special "never despawns" value. */
+function pushPickup(state: GameState, kind: "ammo" | "health", pos: Vec2, amount: number): void {
+  state.nextId += 1;
+  state.pickups.push({ id: state.nextId, kind, pos: { x: pos.x, y: pos.y }, collected: false, amount, ttl: PICKUP_DESPAWN_TTL });
+}
+
 export function applyHitscanDamage(state: GameState, enemy: Enemy, amount: number): void {
-  const impact = state.upgrades.impact;
-  const dmg = amount * (impact ? IMPACT_DAMAGE_MULTIPLIER : 1);
+  const level = state.upgrades.impact;
+  const dmg = amount + impactDamageBonus(level);
   enemy.health -= dmg;
 
   const dx = enemy.pos.x - state.player.pos.x;
   const dy = enemy.pos.y - state.player.pos.y;
   const dist = Math.hypot(dx, dy) || 1;
-  const knock = KNOCKBACK_DISTANCE * (impact ? IMPACT_KNOCKBACK_MULTIPLIER : 1);
+  const knock = impactKnockback(level);
   enemy.pos = moveWithCollision(state.map, enemy.pos, (dx / dist) * knock, (dy / dist) * knock, 0.3);
 
   if (enemy.alive && enemy.health <= 0) {
@@ -248,7 +262,7 @@ export function handlePlayerFire(state: GameState, renderAngle: number): void {
   const { player } = state;
   if (player.fireCooldown > 0 || player.ammo <= 0) return;
 
-  player.fireCooldown = FIRE_COOLDOWN * (state.upgrades.rapid ? RAPID_COOLDOWN_MULTIPLIER : 1);
+  player.fireCooldown = rapidFireCooldown(state.upgrades.rapid);
   player.ammo -= 1;
   // Independent of fireCooldown (which Rapid shortens) so both weapons'
   // animations always start from the same frame 0 — and only on an actual
@@ -261,7 +275,7 @@ export function handlePlayerFire(state: GameState, renderAngle: number): void {
     renderAngle,
     state.projectiles,
     PROJECTILE_DESTROY_RANGE,
-    PROJECTILE_DESTROY_AIM_TOLERANCE,
+    interceptAimTolerance(state.upgrades.intercept),
   );
 
   if (destroyed) {
@@ -269,7 +283,7 @@ export function handlePlayerFire(state: GameState, renderAngle: number): void {
     state.projectilesDestroyed += 1;
     spawnProjectileDestroyBurst(state, destroyed.pos);
   } else {
-    const maxHits = state.upgrades.pierce ? 2 : 1;
+    const maxHits = pierceMaxTargets(state.upgrades.pierce);
     const targets = resolveHitscanMulti(
       state.map,
       player.pos,

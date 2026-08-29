@@ -56,7 +56,7 @@ describe("fireAnimationTimer state behavior", () => {
     const normalFrame = computeWeaponFrame(normal.player.fireAnimationTimer);
 
     const rapid = createInitialState();
-    rapid.upgrades.rapid = true;
+    rapid.upgrades.rapid = 1;
     handlePlayerFire(rapid, 0);
     const rapidFrame = computeWeaponFrame(rapid.player.fireAnimationTimer);
 
@@ -84,16 +84,12 @@ describe("fireAnimationTimer state behavior", () => {
     expect(next.player.fireAnimationTimer).toBeLessThan(afterFire);
   });
 
-  it("resets to zero on restart", () => {
-    const state = createInitialState();
-    handlePlayerFire(state, 0);
-    expect(state.player.fireAnimationTimer).toBeGreaterThan(0);
-
-    state.phase = "lost";
-    const input = createInputState();
-    input.restart = true;
-    const restarted = update(state, input, 1 / 60);
-
-    expect(restarted.player.fireAnimationTimer).toBe(0);
+  it("starts at zero on a brand-new run", () => {
+    // Restart is a whole-state replacement (main.ts hands back a fresh
+    // createInitialState()), not an update()-driven input flag — so the only
+    // thing worth asserting here is that a fresh state never carries over a
+    // stale animation timer from whatever came before it.
+    const fresh = createInitialState();
+    expect(fresh.player.fireAnimationTimer).toBe(0);
   });
 });

@@ -22,7 +22,6 @@ import {
   MAX_RENDER_DIST,
   PARTICLE_MAX_SCREEN_PX,
   PARTICLE_NEAR_CLIP,
-  PEDESTAL_SCALE,
   PICKUP_SCALE,
   PROJECTILE_MAX_SCREEN_PX,
   PROJECTILE_NEAR_CLIP,
@@ -46,13 +45,6 @@ function slotForCell(cell: number): AssetSlot {
   if (cell === 4) return "barrier";
   return cell === 3 ? "door" : cell === 2 ? "wall.b" : "wall.a";
 }
-
-const PEDESTAL_SLOT: Record<string, AssetSlot> = {
-  rapid: "pedestal.rapid",
-  impact: "pedestal.impact",
-  pierce: "pedestal.pierce",
-  salvage: "pedestal.salvage",
-};
 
 /** Casts one ray per column and draws the wall it hits by sampling a vertical
  * strip of that wall's texture (real per-column texture mapping, not a
@@ -139,21 +131,6 @@ function collectBillboards(state: GameState): Billboard[] {
     });
   }
 
-  for (const pedestal of state.pedestals) {
-    const slot = PEDESTAL_SLOT[pedestal.kind];
-    const bob = 0.06 * Math.sin(state.elapsed * 3 + pedestal.id);
-    billboards.push({
-      x: pedestal.pos.x,
-      y: pedestal.pos.y + bob,
-      slot,
-      frame: 0,
-      fallbackColor: ASSET_MANIFEST[slot].placeholderColor,
-      scale: PEDESTAL_SCALE,
-      alpha: 1,
-      anchor: "floor",
-    });
-  }
-
   for (const pickup of state.pickups as Pickup[]) {
     if (pickup.collected) continue;
     const slot: AssetSlot = pickup.kind === "ammo" ? "icon.ammo" : "icon.health";
@@ -162,14 +139,15 @@ function collectBillboards(state: GameState): Billboard[] {
     billboards.push({ x: pickup.pos.x, y: pickup.pos.y, slot, frame: 0, fallbackColor: ASSET_MANIFEST[slot].placeholderColor, scale: PICKUP_SCALE, alpha: blink, anchor: "center" });
   }
 
-  const exitUnlocked = state.encounter.stage === "done";
-  const pulse = exitUnlocked && Math.sin(state.elapsed * 6) > 0;
+  // The exit is purely cosmetic landmark dressing now (no win condition to
+  // "unlock") — a slow, steady pulse so it still reads as a point of interest.
+  const pulse = Math.sin(state.elapsed * 2) > 0;
   billboards.push({
     x: state.map.exit.x + 0.5,
     y: state.map.exit.y + 0.5,
     slot: "icon.exit",
-    frame: exitUnlocked ? 1 : 0,
-    fallbackColor: exitUnlocked ? COLOR_ICE : COLOR_FLOOR,
+    frame: 0,
+    fallbackColor: COLOR_ICE,
     scale: EXIT_SCALE * (pulse ? 1.08 : 1),
     alpha: 1,
     anchor: "center",

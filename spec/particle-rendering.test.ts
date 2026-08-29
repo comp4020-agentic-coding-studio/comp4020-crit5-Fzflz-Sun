@@ -33,7 +33,6 @@ function baseState(): GameState {
   const state = createInitialState();
   state.enemies = [];
   state.pickups = [];
-  state.pedestals = [];
   state.projectiles = [];
   state.particles = [];
   return state;

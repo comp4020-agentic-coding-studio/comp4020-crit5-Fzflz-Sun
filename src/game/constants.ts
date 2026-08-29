@@ -1,5 +1,6 @@
 // Shared tunables. Kept in one place so difficulty/feel adjustments after
 // playtesting don't require hunting through every module.
+import type { UpgradeKind } from "./types";
 
 export const INTERNAL_WIDTH = 320;
 export const INTERNAL_HEIGHT = 200;
@@ -95,11 +96,39 @@ export const MAX_DT = 1 / 20;
 export const PROJECTILE_DESTROY_AIM_TOLERANCE = (14 * Math.PI) / 180;
 export const PROJECTILE_DESTROY_RANGE = HITSCAN_RANGE;
 
-// Room-encounter/wave pacing.
-export const MAX_SIMULTANEOUS_ENEMIES = 3;
+// Wave phase timing (Section 3). A wave is combat (spawning active) ->
+// cleanup (spawning stopped, residual enemies cleared/despawned) -> the
+// screen switches to "upgrade" for the 3-choice pop-up -> "countdown" for
+// WAVE_COUNTDOWN_DURATION -> back to combat at wave+1.
+export const WAVE_COMBAT_DURATION = 45; // seconds, mid-point of the ~40-50s spec range
+export const WAVE_CLEANUP_HIDE_DESPAWN = 15; // an unreached, hidden residual enemy despawns after this long
+export const WAVE_CLEANUP_MAX_DURATION = 18; // hard cap even if a hider never shows — must exceed WAVE_CLEANUP_HIDE_DESPAWN
+export const WAVE_COUNTDOWN_DURATION = 3;
+
 export const SPAWN_TELEGRAPH_DURATION = 0.5;
-export const WAVE_PAUSE_DURATION = 1.2;
 export const BRUTE_TELEGRAPH_DURATION = 0.6;
+
+// Spawn Director concurrency caps (Section 2/4). Difficulty comes from these
+// tables plus spawn-interval/composition, never from unbounded enemy count,
+// HP, or damage growth. Waves past the table's length reuse its last entry —
+// a bounded cyclic-growth mode, not indefinite scaling.
+export const WAVE_ACTIVE_CAP_TABLE: readonly number[] = [4, 6, 7, 8, 10];
+export const MAX_ACTIVE_ENEMIES_HARD_CEILING = 12;
+export const WAVE_RANGED_CAP = 4;
+
+// Seconds between Director spawn attempts during combat phase; shrinks per
+// wave down to a floor so pressure ramps without ever spawning unboundedly
+// fast.
+export const WAVE_SPAWN_INTERVAL_BASE = 3.2;
+export const WAVE_SPAWN_INTERVAL_STEP = 0.25;
+export const WAVE_SPAWN_INTERVAL_FLOOR = 1.4;
+
+// Director anchor bookkeeping (Section 4): an anchor can't be reused until
+// its cooldown elapses, and a spawn point must be at least this many tiles
+// from the player.
+export const SPAWN_ANCHOR_COOLDOWN = 6;
+export const SPAWN_MIN_PLAYER_DIST = 6; // tiles, within the spec's 5-7 range
+export const DIRECTOR_RECENT_MEMORY = 4; // how many recent anchors/zones are avoided
 
 // Kill feedback. Hit-stop only freezes the enemy/world side of the sim (see
 // state.ts's update()) — player input, movement, fire cooldown, the weapon
@@ -119,10 +148,6 @@ export const SCORE_BRUTE = 250;
 export const COMBO_KILLS_PER_STEP = 3;
 export const COMBO_MAX_MULTIPLIER = 4;
 
-// Upgrade pedestals: walk-over world objects, not a menu.
-export const PEDESTAL_SELECT_RADIUS = 0.6;
-export const PEDESTAL_HINT_RADIUS = 2.2;
-
 // Kill-triggered resource drops — deterministic (not RNG), so ammo/health
 // sustain scales with how many enemies the player has actually cleared.
 export const KILL_AMMO_DROP_INTERVAL = 3;
@@ -131,10 +156,56 @@ export const KILL_AMMO_DROP_AMOUNT_SALVAGE = 9;
 export const BRUTE_HEALTH_DROP_AMOUNT = 20;
 export const BRUTE_HEALTH_DROP_AMOUNT_SALVAGE = 28;
 
-// Upgrade effect magnitudes.
-export const RAPID_COOLDOWN_MULTIPLIER = 0.75;
-export const IMPACT_DAMAGE_MULTIPLIER = 2;
-export const IMPACT_KNOCKBACK_MULTIPLIER = 1.6;
+// Ground pickup bounding (Section 5/11): keeps state.pickups from growing
+// without bound over an infinite run. A despawn TTL applies only to ordinary
+// (non-critical) drops — the single most-recent kill drop gets ttl:-1 (never
+// despawns) so a cap/TTL sweep can never delete the player's only supply.
+export const MAX_GROUND_PICKUPS = 10;
+export const PICKUP_DESPAWN_TTL = 20;
+
+// Dead-enemy grace period (Section 5): killEnemy() already ran the death
+// particle burst/hit-stop/drop synchronously, so this is just long enough for
+// that to have visibly played before the enemy is spliced out of
+// state.enemies — an infinite run must never let dead entries accumulate.
+export const ENEMY_DEATH_GRACE = 0.6;
+
+// Upgrade level caps (Section 6). Every kind has an explicit ceiling — no
+// upgrade scales forever — and effectValue()/upgrades.ts is the single place
+// that turns (kind, level) into a numeric effect.
+export const UPGRADE_MAX_LEVEL: Record<UpgradeKind, number> = {
+  rapid: 3,
+  impact: 3,
+  pierce: 3,
+  salvage: 3,
+  mobility: 3,
+  vitality: 4,
+  armour: 3,
+  intercept: 3,
+  combo: 3,
+};
+
+// Per-level effect steps — see upgrades.ts's effectValue() for how these
+// combine with a level to a final numeric value.
+export const RAPID_COOLDOWN_STEP = 0.09; // multiplied off FIRE_COOLDOWN per level
+export const IMPACT_DAMAGE_STEP = 0.5; // extra HITSCAN_DAMAGE per level
+export const IMPACT_KNOCKBACK_STEP = 0.25; // extra KNOCKBACK_DISTANCE multiplier per level
+export const PIERCE_TARGETS_PER_LEVEL = 1; // extra hitscan targets per level
+export const SALVAGE_DROP_BONUS_STEP = 0.25; // extra fraction on kill-drop amounts per level
+export const MOBILITY_SPEED_STEP = 0.12; // extra PLAYER_MOVE_SPEED fraction per level
+export const VITALITY_MAX_HEALTH_STEP = 20; // extra STARTING_HEALTH per level
+export const ARMOUR_REDUCTION_STEP = 0.12; // fraction of incoming damage reduced per level, capped well under 1
+export const ARMOUR_REDUCTION_CAP = 0.4;
+export const INTERCEPT_AIM_TOLERANCE_STEP = (4 * Math.PI) / 180; // widens PROJECTILE_DESTROY_AIM_TOLERANCE per level
+export const COMBO_MULTIPLIER_CAP_BONUS_STEP = 1; // extra COMBO_MAX_MULTIPLIER per level
+
+// The 5-minute milestone (Section 7): a recorded, non-ending event, not a win
+// condition.
+export const MILESTONE_TIME_SECONDS = 5 * 60;
+
+// Local save system (Section 9).
+export const SAVE_STORAGE_KEY = "pie-hall-98:saves:v1";
+export const SAVE_SLOT_COUNT = 3;
+export const SAVE_SCHEMA_VERSION = 1;
 
 export const HINT_DISPLAY_DURATION = 4.5;
 

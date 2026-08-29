@@ -1,8 +1,9 @@
 // Score/combo/resource-drop rules (Section 3/5/7 of the crit-5 spec) and the
 // two whole-run guarantees around them: taking damage resets the streak, and
-// a restart really does wipe every run-scoped field back to zero.
+// the 5-minute milestone marks a run without ending it (Section 7 — infinite
+// survival has no fixed "won" state to reach).
 import { describe, expect, it } from "vitest";
-import { createInitialState, update } from "../src/game/state";
+import { createInitialState, endRunNow, update } from "../src/game/state";
 import { createInputState } from "../src/game/input";
 import { applyHitscanDamage } from "../src/game/combat";
 import type { Enemy } from "../src/game/types";
@@ -10,6 +11,7 @@ import {
   BRUTE_HEALTH_DROP_AMOUNT,
   KILL_AMMO_DROP_AMOUNT,
   KILL_AMMO_DROP_INTERVAL,
+  MILESTONE_TIME_SECONDS,
   SCORE_GRUNT,
 } from "../src/game/constants";
 
@@ -91,44 +93,48 @@ describe("kill-triggered resource drops", () => {
   });
 });
 
-describe("restart", () => {
-  it("wipes score, upgrades, and combo state back to a fresh run", () => {
+describe("5-minute milestone", () => {
+  it("marks the milestone once elapsed crosses MILESTONE_TIME_SECONDS, without ending the run", () => {
     const state = createInitialState();
-    state.phase = "lost";
-    state.score = 5000;
-    state.multiplier = 4;
-    state.bestMultiplier = 4;
-    state.killCount = 12;
-    state.upgrades = { rapid: true, impact: true, pierce: true, salvage: true };
-    state.upgradeChoice1 = "rapid";
-    state.upgradeChoice2 = "pierce";
+    const input = createInputState();
+    state.elapsed = MILESTONE_TIME_SECONDS - 0.5;
+
+    const before = update(state, input, 0.25);
+    expect(before.milestoneReached).toBe(false);
+
+    const after = update(before, input, 0.5);
+    expect(after.milestoneReached).toBe(true);
+    expect(after.milestoneBannerTimer).toBeGreaterThan(0);
+    // Infinite survival: crossing the milestone never ends or pauses the run.
+    expect(after.screen).toBe("playing");
+  });
+
+  it("only fires once — the banner timer counts down and reaching it again does not re-trigger it", () => {
+    const state = createInitialState();
+    state.elapsed = MILESTONE_TIME_SECONDS + 1;
+    state.milestoneReached = true;
+    state.milestoneBannerTimer = 0;
 
     const input = createInputState();
-    input.restart = true;
-    const fresh = update(state, input, 1 / 60);
-
-    expect(fresh.phase).toBe("playing");
-    expect(fresh.score).toBe(0);
-    expect(fresh.multiplier).toBe(1);
-    expect(fresh.killCount).toBe(0);
-    expect(fresh.upgrades).toEqual({ rapid: false, impact: false, pierce: false, salvage: false });
-    expect(fresh.upgradeChoice1).toBeNull();
-    expect(fresh.upgradeChoice2).toBeNull();
+    const next = update(state, input, 1 / 60);
+    expect(next.milestoneBannerTimer).toBe(0);
   });
 });
 
 describe("results-screen transition", () => {
-  it("only reaches 'won' once the final room is done and the player is at the exit", () => {
+  it("endRunNow snapshots the current run into state.results and switches to the results screen", () => {
     const state = createInitialState();
-    state.encounter.stage = "roomC";
-    state.player.pos = { x: state.map.exit.x + 0.5, y: state.map.exit.y + 0.5 };
+    state.score = 1234;
+    state.wave.number = 3;
+    state.stats.totalKills = 7;
+    state.bestMultiplier = 2;
 
-    const input = createInputState();
-    const stillPlaying = update(state, input, 1 / 60);
-    expect(stillPlaying.phase).toBe("playing");
+    endRunNow(state);
 
-    stillPlaying.encounter.stage = "done";
-    const finished = update(stillPlaying, input, 1 / 60);
-    expect(finished.phase).toBe("won");
+    expect(state.screen).toBe("results");
+    expect(state.results).not.toBeNull();
+    expect(state.results!.score).toBe(1234);
+    expect(state.results!.wave).toBe(3);
+    expect(state.results!.totalKills).toBe(7);
   });
 });

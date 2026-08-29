@@ -18,6 +18,8 @@ const OPEN_MAP: LevelMap = {
   cells: Array.from({ length: 30 }, () => 0),
   doors: [],
   exit: { x: 9, y: 1 },
+  zones: [],
+  anchors: [],
 };
 
 function wallAt(map: LevelMap, x: number, y: number): LevelMap {
@@ -103,7 +105,7 @@ describe("PIERCE upgrade", () => {
     state.player.pos = { x: 1, y: 1 };
     state.player.angle = 0;
     state.player.ammo = 5;
-    state.upgrades.pierce = true;
+    state.upgrades.pierce = 1;
 
     const near = makeEnemy({ id: 1, pos: { x: 4, y: 1 }, health: 1, maxHealth: 1 });
     const far = makeEnemy({ id: 2, pos: { x: 8, y: 1 }, health: 1, maxHealth: 1 });
@@ -115,7 +117,7 @@ describe("PIERCE upgrade", () => {
     expect(near.alive).toBe(false);
     expect(far.alive).toBe(false);
     // Two separate one-hit kills, not one enemy counted twice.
-    expect(state.killCount).toBe(2);
+    expect(state.stats.totalKills).toBe(2);
   });
 
   it("without PIERCE, the same shot only ever reaches the nearest enemy", () => {
