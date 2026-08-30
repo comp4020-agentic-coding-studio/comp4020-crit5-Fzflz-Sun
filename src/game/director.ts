@@ -20,6 +20,7 @@ import {
   WAVE_CLEANUP_HIDE_DESPAWN,
   WAVE_CLEANUP_MAX_DURATION,
   WAVE_COMBAT_DURATION,
+  WAVE_INITIAL_BURST_FRACTION,
   WAVE_RANGED_CAP,
   WAVE_SPAWN_INTERVAL_BASE,
   WAVE_SPAWN_INTERVAL_FLOOR,
@@ -70,6 +71,8 @@ export function beginWave(state: GameState, waveNumber: number): void {
   // last wave is fair game again at the start of the next.
   state.director.recentAnchors = [];
   state.director.recentZoneIds = [];
+
+  spawnInitialWaveBurst(state);
 }
 
 export function isRangedEnemyKind(kind: EnemyKind): boolean {
@@ -131,6 +134,35 @@ export function pickSpawnAnchor(state: GameState): SpawnAnchor | null {
   return pool[rngInt(state.rng, pool.length)]!;
 }
 
+/** Anchor pick for the wave-opening burst (see spawnInitialWaveBurst):
+ * unlike pickSpawnAnchor, this deliberately does NOT reject an anchor for
+ * being visible-and-close — the whole point of the burst is enemies the
+ * player can already see. Still rejects cooldown/solid-cell/too-close/
+ * recently-used anchors, and among what's left prefers one with a clear line
+ * of sight to the player, falling back to any valid anchor if none is
+ * visible from where the player currently stands. */
+function pickBurstSpawnAnchor(state: GameState): SpawnAnchor | null {
+  const { map, player, director } = state;
+  const candidates: SpawnAnchor[] = [];
+
+  for (const anchor of map.anchors) {
+    if (director.anchorCooldowns[anchor.id]) continue;
+    if (isSolid(map, anchor.pos.x, anchor.pos.y)) continue;
+    if (director.recentAnchors.includes(anchor.id)) continue;
+
+    const dist = Math.hypot(anchor.pos.x - player.pos.x, anchor.pos.y - player.pos.y);
+    if (dist < SPAWN_MIN_PLAYER_DIST) continue;
+
+    candidates.push(anchor);
+  }
+
+  if (candidates.length === 0) return null;
+
+  const visible = candidates.filter((a) => hasLineOfSight(map, a.pos, player.pos));
+  const pool = visible.length > 0 ? visible : candidates;
+  return pool[rngInt(state.rng, pool.length)]!;
+}
+
 /** Composition mix shifts with wave number, capped at wave 5's mix (bounded
  * cyclic growth, Section 2) — never past that, and a ranged pick above the
  * current rangedCap silently downgrades to grunt rather than being spawned
@@ -149,16 +181,10 @@ function pickComposition(state: GameState, rangedActive: number): EnemyKind {
   return isRangedEnemyKind(kind) && !rangedAllowed ? "grunt" : kind;
 }
 
-/** One Director attempt at a single spawn (never a batch) during the combat
- * phase: respects the active/ranged caps and anchor availability, then queues
- * a telegraph rather than an immediate Enemy — see resolveTelegraphs. */
-function attemptSpawn(state: GameState): void {
-  const { total, ranged } = countActiveByRanged(state);
-  if (total >= state.wave.activeCap) return;
-
-  const anchor = pickSpawnAnchor(state);
-  if (!anchor) return;
-
+/** Shared by attemptSpawn and spawnInitialWaveBurst: books the anchor's
+ * cooldown/recency, rolls composition, and queues a telegraph rather than an
+ * immediate Enemy — see resolveTelegraphs. */
+function spawnAtAnchor(state: GameState, anchor: SpawnAnchor, ranged: number): void {
   const kind = pickComposition(state, ranged);
 
   state.director.anchorCooldowns[anchor.id] = SPAWN_ANCHOR_COOLDOWN;
@@ -175,6 +201,38 @@ function attemptSpawn(state: GameState): void {
     timer: kind === "brute" ? BRUTE_TELEGRAPH_DURATION : SPAWN_TELEGRAPH_DURATION,
   };
   state.telegraphs.push(telegraph);
+}
+
+/** One Director attempt at a single spawn (never a batch) during the combat
+ * phase: respects the active/ranged caps and anchor availability. */
+function attemptSpawn(state: GameState): void {
+  const { total, ranged } = countActiveByRanged(state);
+  if (total >= state.wave.activeCap) return;
+
+  const anchor = pickSpawnAnchor(state);
+  if (!anchor) return;
+
+  spawnAtAnchor(state, anchor, ranged);
+}
+
+/** Resolves a bounded batch of the wave's spawns immediately at wave start —
+ * WAVE_INITIAL_BURST_FRACTION of activeCap, the same fixed budget every wave
+ * already has, just front-loaded — so a wave opens with enemies already on
+ * the map (some already in view) instead of the Director trickling the first
+ * one in only once the player has wandered off looking for it. Bounded by
+ * `target` (derived from the already-capped activeCap) and by however many
+ * valid anchors actually exist: never an unbounded loop. */
+export function spawnInitialWaveBurst(state: GameState): void {
+  const target = Math.min(state.wave.activeCap, Math.ceil(state.wave.activeCap * WAVE_INITIAL_BURST_FRACTION));
+  for (let i = 0; i < target; i++) {
+    const { total, ranged } = countActiveByRanged(state);
+    if (total >= state.wave.activeCap) break;
+
+    const anchor = pickBurstSpawnAnchor(state);
+    if (!anchor) break;
+
+    spawnAtAnchor(state, anchor, ranged);
+  }
 }
 
 /** Counts down active telegraphs and, on expiry, pushes the real Enemy into

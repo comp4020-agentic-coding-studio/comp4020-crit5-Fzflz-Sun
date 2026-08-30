@@ -7,7 +7,7 @@
 // cooldown, or was used in one of the last few spawns.
 import { describe, expect, it } from "vitest";
 import { createInitialState } from "../src/game/state";
-import { pickSpawnAnchor } from "../src/game/director";
+import { createDirectorState, pickSpawnAnchor } from "../src/game/director";
 import { isSolid } from "../src/game/level";
 import { SPAWN_MIN_PLAYER_DIST } from "../src/game/constants";
 import type { LevelMap, SpawnAnchor } from "../src/game/types";
@@ -41,6 +41,7 @@ describe("pre-spawn safety — pickSpawnAnchor", () => {
     map = wallAt(map, 5, 5);
     const state = createInitialState();
     state.map = map;
+    state.director = createDirectorState();
     state.player.pos = { x: 25, y: 15 }; // far from the walled anchor
 
     expect(isSolid(map, 5, 5)).toBe(true);
@@ -51,6 +52,7 @@ describe("pre-spawn safety — pickSpawnAnchor", () => {
     const map = testMap({ anchors: [anchor(1, 5, 5)] });
     const state = createInitialState();
     state.map = map;
+    state.director = createDirectorState();
     state.player.pos = { x: 5.5, y: 5 }; // well inside the min-distance radius
 
     expect(pickSpawnAnchor(state)).toBeNull();
@@ -60,6 +62,7 @@ describe("pre-spawn safety — pickSpawnAnchor", () => {
     const map = testMap({ anchors: [anchor(1, 5, 5 + SPAWN_MIN_PLAYER_DIST + 1)] });
     const state = createInitialState();
     state.map = map; // fully open map: the anchor is in clear line of sight
+    state.director = createDirectorState();
     state.player.pos = { x: 5, y: 5 };
 
     expect(pickSpawnAnchor(state)).toBeNull();
@@ -69,6 +72,7 @@ describe("pre-spawn safety — pickSpawnAnchor", () => {
     const map = testMap({ anchors: [anchor(1, 5, 5 + SPAWN_MIN_PLAYER_DIST + 4)] });
     const state = createInitialState();
     state.map = map;
+    state.director = createDirectorState(); // isolate from the real map's wave-1 opening burst
     state.player.pos = { x: 5, y: 5 };
 
     const picked = pickSpawnAnchor(state);
@@ -81,6 +85,7 @@ describe("pre-spawn safety — pickSpawnAnchor", () => {
     });
     const state = createInitialState();
     state.map = map;
+    state.director = createDirectorState();
     state.player.pos = { x: 15, y: 18 };
     state.director.anchorCooldowns = { 1: 3 };
 
@@ -94,6 +99,7 @@ describe("pre-spawn safety — pickSpawnAnchor", () => {
     });
     const state = createInitialState();
     state.map = map;
+    state.director = createDirectorState();
     state.player.pos = { x: 15, y: 18 };
     state.director.recentAnchors = [1];
 
@@ -105,6 +111,7 @@ describe("pre-spawn safety — pickSpawnAnchor", () => {
     const map = testMap({ anchors: [anchor(1, 5, 5)] });
     const state = createInitialState();
     state.map = map;
+    state.director = createDirectorState();
     state.player.pos = { x: 5.2, y: 5 }; // the only anchor is inside the min-distance radius
 
     expect(pickSpawnAnchor(state)).toBeNull();

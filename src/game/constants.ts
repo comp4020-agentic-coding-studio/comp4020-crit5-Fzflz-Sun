@@ -112,22 +112,34 @@ export const BRUTE_TELEGRAPH_DURATION = 0.6;
 // tables plus spawn-interval/composition, never from unbounded enemy count,
 // HP, or damage growth. Waves past the table's length reuse its last entry —
 // a bounded cyclic-growth mode, not indefinite scaling.
-export const WAVE_ACTIVE_CAP_TABLE: readonly number[] = [4, 6, 7, 8, 10];
-export const MAX_ACTIVE_ENEMIES_HARD_CEILING = 12;
-export const WAVE_RANGED_CAP = 4;
+export const WAVE_ACTIVE_CAP_TABLE: readonly number[] = [24, 32, 40, 48, 56];
+export const MAX_ACTIVE_ENEMIES_HARD_CEILING = 64;
+export const WAVE_RANGED_CAP = 16;
 
 // Seconds between Director spawn attempts during combat phase; shrinks per
 // wave down to a floor so pressure ramps without ever spawning unboundedly
-// fast.
-export const WAVE_SPAWN_INTERVAL_BASE = 3.2;
-export const WAVE_SPAWN_INTERVAL_STEP = 0.25;
-export const WAVE_SPAWN_INTERVAL_FLOOR = 1.4;
+// fast. Tuned low enough that the much larger caps above are actually
+// reachable inside a single WAVE_COMBAT_DURATION window, not just a paper
+// ceiling.
+export const WAVE_SPAWN_INTERVAL_BASE = 1.0;
+export const WAVE_SPAWN_INTERVAL_STEP = 0.12;
+export const WAVE_SPAWN_INTERVAL_FLOOR = 0.4;
 
 // Director anchor bookkeeping (Section 4): an anchor can't be reused until
 // its cooldown elapses, and a spawn point must be at least this many tiles
-// from the player.
-export const SPAWN_ANCHOR_COOLDOWN = 6;
-export const SPAWN_MIN_PLAYER_DIST = 6; // tiles, within the spec's 5-7 range
+// from the player. Cooldown is short so the map's 16 fixed anchors can each
+// fire multiple times per wave — with caps this high, reuse (not more
+// anchors) is what keeps the map feeling populated.
+export const SPAWN_ANCHOR_COOLDOWN = 1.5;
+export const SPAWN_MIN_PLAYER_DIST = 5; // tiles, within the spec's 5-7 range
+
+// Fraction of a wave's activeCap resolved as an immediate opening burst (see
+// director.ts's spawnInitialWaveBurst) instead of trickling in over the
+// wave's spawn interval — so a wave (including the very first) already has
+// enemies on the map, some already in the player's line of sight, the moment
+// it begins. Still bounded by the same activeCap as everything else here;
+// this only changes *when* those spawns resolve, not how many can ever exist.
+export const WAVE_INITIAL_BURST_FRACTION = 0.7;
 export const DIRECTOR_RECENT_MEMORY = 4; // how many recent anchors/zones are avoided
 
 // Kill feedback. Hit-stop only freezes the enemy/world side of the sim (see
@@ -155,6 +167,12 @@ export const KILL_AMMO_DROP_AMOUNT = 6;
 export const KILL_AMMO_DROP_AMOUNT_SALVAGE = 9;
 export const BRUTE_HEALTH_DROP_AMOUNT = 20;
 export const BRUTE_HEALTH_DROP_AMOUNT_SALVAGE = 28;
+// A Brute kill always drops health (above); this generalizes a smaller health
+// drop to ordinary kills too, on its own interval (desynced from
+// KILL_AMMO_DROP_INTERVAL so they don't always land on the same kill).
+export const KILL_HEALTH_DROP_INTERVAL = 5;
+export const KILL_HEALTH_DROP_AMOUNT = 12;
+export const KILL_HEALTH_DROP_AMOUNT_SALVAGE = 16;
 
 // Ground pickup bounding (Section 5/11): keeps state.pickups from growing
 // without bound over an infinite run. A despawn TTL applies only to ordinary

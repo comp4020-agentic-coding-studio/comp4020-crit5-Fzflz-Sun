@@ -10,7 +10,15 @@ import type { GameState, InputState, Pickup, PlayerStats, ResultsSnapshot } from
 import { buildLevel, isSolid, moveWithCollision, updateDoors } from "./level";
 import { resolveEntitySeparation, updateEnemies } from "./enemies";
 import { applyPlayerDamage, handlePlayerFire } from "./combat";
-import { beginWave, cleanupDeadEnemies, createDirectorState, createWaveState, openUpgradeMenu, updateWave } from "./director";
+import {
+  beginWave,
+  cleanupDeadEnemies,
+  createDirectorState,
+  createWaveState,
+  openUpgradeMenu,
+  spawnInitialWaveBurst,
+  updateWave,
+} from "./director";
 import { createUpgradeLevels, mobilityBackSpeed, mobilityForwardSpeed } from "./upgrades";
 import { createRng } from "./rng";
 import { resetInputState } from "./input";
@@ -71,7 +79,7 @@ export function createInitialState(seed: number = DEFAULT_SEED): GameState {
     fireAnimationTimer: 0,
   };
 
-  return {
+  const state: GameState = {
     screen: "playing",
 
     map,
@@ -116,6 +124,14 @@ export function createInitialState(seed: number = DEFAULT_SEED): GameState {
     activeSlot: null,
     results: null,
   };
+
+  // beginWave() (director.ts) does this for every later wave; wave 1 never
+  // goes through beginWave, so a fresh run needs its own opening burst here
+  // — otherwise wave 1 alone would trickle in over the spawn interval instead
+  // of already having enemies on the map at t=0.
+  spawnInitialWaveBurst(state);
+
+  return state;
 }
 
 /** The state the app boots into: the title screen, world already built (so a

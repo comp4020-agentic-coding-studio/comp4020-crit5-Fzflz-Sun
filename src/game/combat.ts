@@ -28,6 +28,8 @@ import {
   HIT_PARTICLE_COUNT,
   KILL_AMMO_DROP_AMOUNT,
   KILL_AMMO_DROP_INTERVAL,
+  KILL_HEALTH_DROP_AMOUNT,
+  KILL_HEALTH_DROP_INTERVAL,
   KILL_PARTICLE_MULTIPLIER,
   MUZZLE_PARTICLE_TTL,
   PICKUP_DESPAWN_TTL,
@@ -204,8 +206,13 @@ function killEnemy(state: GameState, enemy: Enemy): void {
   if (state.stats.totalKills % KILL_AMMO_DROP_INTERVAL === 0) {
     pushPickup(state, "ammo", enemy.pos, Math.round(KILL_AMMO_DROP_AMOUNT * salvage));
   }
+  // A Brute always drops its larger health pickup; ordinary kills also drop a
+  // smaller one on their own interval, so sustain doesn't depend on hunting
+  // Brutes specifically.
   if (isBrute) {
     pushPickup(state, "health", { x: enemy.pos.x + 0.25, y: enemy.pos.y + 0.25 }, Math.round(BRUTE_HEALTH_DROP_AMOUNT * salvage));
+  } else if (state.stats.totalKills % KILL_HEALTH_DROP_INTERVAL === 0) {
+    pushPickup(state, "health", { x: enemy.pos.x + 0.25, y: enemy.pos.y + 0.25 }, Math.round(KILL_HEALTH_DROP_AMOUNT * salvage));
   }
 }
 
