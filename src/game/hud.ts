@@ -82,8 +82,11 @@ let prevMultiplier = -1;
 let prevTimeText = "";
 let prevWave = -1;
 let prevHintText: string | null = "unset"; // never a real hint text or null on first frame
-let prevMilestoneShown = false;
-let prevResultsShown = false;
+// null (not false) so the post-reset diff check below always fires on the
+// next frame even when the new run's real value happens to be false too —
+// otherwise an overlay left visible from the previous run never gets hidden.
+let prevMilestoneShown: boolean | null = null;
+let prevResultsShown: boolean | null = null;
 let resultsWritten = false;
 
 /** Resets every HUD diff cache — call once when a fresh run starts so a new
@@ -98,8 +101,8 @@ export function resetHudCache(): void {
   prevTimeText = "";
   prevWave = -1;
   prevHintText = "unset";
-  prevMilestoneShown = false;
-  prevResultsShown = false;
+  prevMilestoneShown = null;
+  prevResultsShown = null;
   resultsWritten = false;
 }
 
