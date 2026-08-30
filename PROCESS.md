@@ -1,31 +1,53 @@
 # Process overview
 
-## What I built
+## What I built — current version, 2026-08-30
 
-**PIE HALL 98** — a browser-playable, Canvas-2D pseudo-3D shooter in the style
-of mid-90s edutainment raycasters (an original game, not a clone of any real
-1998 title): one fixed level of four connected school-hall rooms (Entrance
-Hall, Locker Corridor, Lab Classroom, Activity Room) built deliberately
-oversized against a small player scale, a single handgun for hitscan fire
-against slow dodgeable enemy projectiles, ammo/health pickups, and a full
-fight -> reward -> grow stronger -> harder fight -> results loop completable
-in one sitting, well under 5 minutes. Three enemy kinds (reframed as mascots
-and cleaning/vending robots) with genuinely different behavior — a fast
-melee-only chaser, a distance-keeping ranged kiter, and a slow telegraphed
-route-blocker — arrive across a scripted 16-enemy sequence of room encounters
-(a one-enemy tutorial, then two escalating two-wave rooms) rather than as a
-static level population, and the player picks one of two meaningfully
-different upgrades after each of the first two rooms from in-world pedestals,
-not a menu. Pickups, projectiles, and the exit marker are still procedurally drawn at
-runtime from a single sprite factory (`src/game/assets.ts`); a small, curated
-set of real CC0 sprites and sound effects was added on top for the two wall
-textures, the door, the three enemy kinds, and a self-contained 5-frame
-handgun (idle plus a 4-frame fire animation, hand and muzzle flash included
-in the source art itself), with async loading and a procedural fallback if a
-file fails — see `THIRD_PARTY_ASSETS.md` for exactly what was used, from
-where, and under what license.
+**PIE HALL 98** is an original browser-playable, Canvas-2D pseudo-3D survival
+shooter. The visual starting point was my childhood memory of *Wheels!*:
+bright blue/purple indoor spaces, coarse pixels, and small figures inside
+oversized rooms. It is an interpretation of that feeling, not a remake or a
+reuse of that game's assets. The renderer uses raycasting and flat sprites
+at 320×200; movement is continuous, with a 32-step viewing direction for the
+deliberately rough look. Forward/backward movement, turning, and one handgun
+remain the controls — no jumping, strafing, mouse-look, reload, or weapon
+inventory.
+
+The current loop is **fight -> collect resources -> choose an upgrade ->
+survive the next wave**, rather than the earlier fixed-content exit run:
+
+- A fixed 43×31 indoor map has eight zones, a central hall, loop corridors,
+  cover, automatic doors, and 16 predefined spawn anchors. The map is not
+  procedurally randomized, and zones share the existing art set.
+- Enemies keep arriving during each 45-second combat phase. A timed cleanup
+  phase then stops spawning and removes remaining enemies after 15 seconds
+  without kill credit, so one distant enemy cannot hold up progression.
+  Grunts chase at close range, Scouts keep their distance and shoot, and
+  Brutes telegraph slower, heavier attacks. The player's shot can also
+  destroy an incoming projectile.
+- Between waves, the world pauses for a three-option menu: choose one leveled
+  upgrade, then continue after a three-second countdown. Nine upgrade kinds
+  cover fire rate, damage/knockback, piercing, resource drops, movement,
+  health, armour, projectile interception, and the score multiplier.
+- Kills build score and a no-damage streak multiplier, with periodic ammo
+  and health drops. Five minutes triggers a milestone banner, not a win
+  screen. Death or choosing End Run produces the results screen.
+- Title, instructions, pause, save/load, and confirmation screens surround
+  the run. Three browser-local save slots preserve logical progress for
+  Continue/Load Game; menus pause the survival clock and combat.
+
+The art remains deliberately small in scope: a curated CC0 set supplies the
+wall/door textures, three enemy kinds, five-frame handgun, and seven sound
+cues; pickups, projectiles, and other simple effects use procedural sprites.
+The handgun frames are drawn with nearest-neighbour integer scaling. Sprite
+loading has a procedural fallback. Sources, authors, licenses, and edits are
+recorded in `THIRD_PARTY_ASSETS.md`.
 
 ## The moments that mattered
+
+The first seven moments below record earlier builds. Their room counts,
+exit-based win condition, and old tuning values are historical evidence,
+not descriptions of the current endless mode. Later sections explain what
+changed and why.
 
 1. **The level looked winnable by inspection but hadn't actually been proven
    winnable.** Manually playtesting a 3–5 room, 7-enemy level by hand, over
@@ -48,11 +70,11 @@ where, and under what license.
    confirmations landed; the fix itself is
    [`42a3432`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/42a3432).
 
-2. **The required deterministic combat test needed a synthetic map, not the
-   real level.** The spec calls for an automated test proving a shot can only
+2. **The deterministic combat test needed a synthetic map, not the
+   real level.** The original combat rule was that a shot could only
    damage the nearest visible enemy on the ray, and that a wall in front of an
-   enemy blocks it. Testing this against the real 23×15 level would couple the
-   test to level geometry that has nothing to do with the rule being checked.
+   enemy blocked it. Testing this against the then-current 23×15 level would
+   couple the test to geometry unrelated to the rule being checked.
    Instead, `spec/combat.test.ts` builds a minimal open corridor map per case
    and calls `resolveHitscan` directly with hand-placed enemies — nearest-hit,
    occluded, out-of-tolerance, dead-enemy, and out-of-range cases each get
@@ -62,17 +84,18 @@ where, and under what license.
    [`b98e41c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/b98e41c).
 
 3. **A quantized render angle can make a genuinely aimed shot miss.** The
-   spec calls for a coarse ~32-step render angle rather than continuous
-   aiming, for the low-fidelity period feel, but the hitscan itself still
+   visual design uses a coarse ~32-step render angle rather than continuous
+   viewing, for the low-fidelity period feel, but the hitscan itself still
    needs to feel fair with no crosshair. Using the raw continuous angle for
    aim tolerance would let a shot that reads as dead-on-screen still fail,
    since the rendered direction and the fired direction could differ by up to
-   half a render step. `HITSCAN_AIM_TOLERANCE` (7°) is set to clear that
+   half a render step. `HITSCAN_AIM_TOLERANCE` was initially 7° to clear that
    worst case (360°/32/2 = 5.625°) with margin, and the hitscan fires along
    the same quantized angle the frame renders — documented at the constant's
    definition in
    [`b98e41c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/b98e41c#diff-src/game/constants.ts)
-   so the two numbers can't drift apart independently later.
+   so the two numbers can't drift apart independently later. The current
+   base tolerance is 9.5° after the subsequent responsiveness pass.
 
 4. **Manual playtesting found a real "stuck against the wall" bug the
    automated checks couldn't have caught.** After the level was confirmed
@@ -143,13 +166,20 @@ where, and under what license.
    the old center-anchor behavior since they read fine either way.
    `drawBillboards` in `src/game/renderer.ts`.
 
-## 2026-08-28 — from tech demo to a short arcade run
+## Earlier iteration — from tech demo to a short arcade run (superseded)
+
+This is the intermediate 16-enemy version, before the infinite-survival
+redesign. Its implementation is preserved in
+[`5de48a5`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/5de48a5);
+`encounters.ts`, world upgrade pedestals, and the exit-based ending described
+here have since been replaced. The following records the decisions and
+verification from that stage, not a claim about the current build.
 
 The previous version was a playable raycaster with a static population of
 seven enemies scattered across the level and no structure to the fight beyond
 "walk around and shoot whatever you see." This pass turned it into a scripted
-arcade run with a real beginning, middle, and end, while keeping every hard
-constraint from the original brief (tank controls, one handgun, no new art,
+arcade run with a real beginning, middle, and end, while keeping the chosen
+design limits for that pass (tank controls, one handgun, no new art,
 the existing bright pastel palette and handgun animation untouched):
 
 - **Controls retuned, not redesigned.** Tank-style forward/backward/turn is
@@ -200,10 +230,11 @@ the existing bright pastel palette and handgun animation untouched):
   fully rebuilds state via `createInitialState()` — no leftover upgrades,
   score, or combo from the previous run.
 
-Verification: the full existing check suite (`pnpm check` — 44 unit/spec
-tests across encounter progression, the simultaneous-enemy cap, scoring/combo,
+Recorded verification for the intermediate arcade iteration: the then-existing
+check suite (`pnpm check` — 44 unit/spec tests across encounter progression,
+the simultaneous-enemy cap, scoring/combo,
 resource drops, PIERCE, and projectile destruction — plus typecheck, build,
-lint) and the Playwright e2e suite (`pnpm test:e2e`) both pass. A scripted
+lint) and the Playwright e2e suite (`pnpm test:e2e`) both passed. A scripted
 autopilot drove the actual built site in a real browser end to end (real
 `requestAnimationFrame`/keyboard-event timing, not a headless simulation) and
 reached the results screen with all 16 enemies cleared and a grade of A,
@@ -218,20 +249,108 @@ verify this behavior (a headless playtest bot, a live-browser autopilot
 script, and their temporary state-inspection hooks) was deleted once each
 check passed — none of it shipped.
 
-## Known limitations / left as placeholder
+## 2026-08-29 — separating retro feel from unintended stutter
 
-- Most visuals are still procedurally-drawn flat-color/geometric-shape
-  placeholders generated at runtime (pickups, projectiles, the exit marker,
-  the share card); nothing of the real 1998 game this concept was inspired by
-  was reused — no name, logo, maps, sprites, or audio. A small set of real
-  CC0 sprites/sounds was added for the two wall textures, the door, the
-  enemies, and the weapon — see `THIRD_PARTY_ASSETS.md`.
-- Audio is minimal: seven short cues (fire, enemy hit, enemy death, player
-  hurt, two pickup types, door open), unlocked after the first keyboard/touch
-  interaction per browser autoplay policy. No background music.
-- Every automated playthrough check (headless and in-browser) has been a
-  scripted proxy for a human, not a real cold-start playtester; the
-  Playwright e2e suite and manual play (moments 1, 4, 6) cover real browser
-  timing and real input, but a live human playtest is still worth doing
-  before calling the wave/upgrade balance and the 3.5-4.5 minute pacing
-  target final.
+Playtesting exposed two different problems: severe stutter when touching an
+enemy, then a remaining interruption during sustained shooting. Calling both
+"a rendering problem" would have hidden the distinction. Working with coding
+agents, I used those repeatable situations to narrow the investigation and
+then checked the result by playing again.
+
+The first pass introduced cooldown-gated contact damage and an explicit hurt
+event, instead of treating every overlapping frame as a fresh damage/sound
+event. Entity separation gained a non-zero fallback for exact overlap. Audio
+was pooled and rate-limited, while death particles moved from the expensive
+billboard stripe renderer to a capped, single-rectangle draw path. Regression
+tests cover contact cooldowns, separation, audio events, spawn safety, and
+particle draw-call budgets.
+[`5de48a5`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/5de48a5).
+
+That improved contact but did not fully solve repeated firefights. The next
+pass replaced active audio-element seeking with one shared Web Audio context
+and decoded sound buffers, shortened the firing cue, and deduplicated
+same-frame sounds. It also removed the global hit-stop early return: brief
+enemy/world freezes remain, but player movement, firing cooldown, weapon
+animation, and elapsed time keep advancing. The fire animation now has its
+own timer, so a fire-rate upgrade cannot skip its opening frames. Projectiles
+received a cheaper per-entity draw path too. Tests specifically protect those
+behaviours.
+[`d363b8c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/d363b8c).
+
+My follow-up playtest feedback was that the stutter was almost gone. That is
+a qualitative observation, not a measured frame-rate guarantee, especially
+after the later increase in enemy density. The useful lesson was that an
+intentional "impact" effect can feel like a bug when it interrupts the very
+controls the player is trying to use.
+
+## 2026-08-30 — from short encounters to endless survival
+
+The fixed encounter sequence still left too little to do. I wanted a reason
+to keep fighting without spending the remaining effort on more bespoke art
+or a weapon collection. The redesign therefore changed structure and rewards:
+`director.ts` replaced `encounters.ts`, the map grew to eight loop-connected
+zones, and enemies are replenished during timed waves rather than drawn from
+a fixed total population. Difficulty comes from spawn pace, density, and
+enemy mix, then plateaus instead of scaling health or damage forever.
+
+The original upgrade pedestals also made the reward easy to miss: the player
+had to walk over and inspect them. Replacing them with a paused three-choice
+menu makes the decision explicit and separates combat from choosing how to
+grow. `upgrades.ts` holds nine leveled effects with ceilings. Existing ammo
+and health pickups still belong in the world; permanent ability choices no
+longer do.
+
+Making a run open-ended also required a way to leave and return. Explicit
+screen states coordinate the title, pause, instructions, save/load,
+confirmation, upgrade, and results screens. `save.ts` stores versioned
+logical run state in three localStorage slots, including upgrades, enemies,
+wave progress, door states, and RNG state. Audio objects, projectiles,
+particles, and other transient effects are rebuilt or cleared on load, so
+this is continuation of progress, not an exact frame-by-frame replay.
+Dead enemies and old pickups are cleaned up rather than retained for the
+whole run. These changes landed together in
+[`ce69e01`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/ce69e01).
+
+A larger map with conservative spawning could still feel empty. The next
+tuning pass raised the active-enemy budgets to 24/32/40/48/56 across the first
+five waves, kept a separate hard-ceiling constant of 64 and a ranged budget
+of 16, and shortened spawn intervals from 1.0 seconds toward a 0.4-second
+floor. These are configured budgets, not a claim that every wave always
+reaches those populations. Each wave now queues an opening burst, limited by
+available safe-distance anchors, with visible anchors preferred for that
+burst; enemies still appear after their short telegraph. Ordinary kills can
+also yield periodic health drops, rather than health depending only on Brutes.
+[`4da80b4`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-Fzflz-Sun/commit/4da80b4).
+
+## Current verification and remaining limits
+
+- During this documentation update on 2026-08-30, `pnpm check` passed against
+  gameplay revision `4da80b4`: type checking, production build, TypeScript/CSS
+  lint, and **101 tests across 14 files**. These cover combat, scoring,
+  contact/separation, wave transitions and sampled spawn caps, map
+  reachability, audio-event handling, selective hit-stop, weapon animation,
+  draw-call budgets, and shipped asset-size limits.
+- `pnpm check:evidence` also passed: the reflection filename is correct and
+  all seven distinct commit citations in this process document resolve
+  locally. `git diff --check` found no whitespace errors.
+- The repository also contains Playwright checks for title/start, pause,
+  save/load, ending a run, one live wave/upgrade cycle, touch controls, and
+  layout. They were not rerun for this documentation-only change. Earlier
+  browser passes recorded above or in commit messages apply to their own
+  revisions; they are not evidence of a fresh run after the density change.
+  Some browser-test descriptions still assume the earlier sparse opening.
+- A bounded-array test or asset-size budget is not a 15–30 minute browser
+  soak test or a frame-time measurement. The higher-density version still
+  needs that longer playtest and balancing feedback from a new player.
+- "Endless" describes continued waves, not endless new content: the map and
+  default RNG seed are fixed, the enemy set is three kinds, and difficulty
+  and upgrade levels cap out. When too few upgrades remain eligible, the
+  current menu fills spare options with kinds that may already be maxed;
+  selecting one does not promise further growth. That late-run reward case
+  remains a limitation.
+- Saves are local to the browser, with no cloud sync, and transient combat
+  effects do not survive loading. Corrupt-save and nested-menu edge cases
+  need broader coverage than the existing basic save/load browser scenario.
+- The small shared art set and seven sound cues are intentional scope
+  limits. There is no background music, and no claim that the eight map
+  zones have eight independently authored visual themes.
